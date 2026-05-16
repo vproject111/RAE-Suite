@@ -2,6 +2,7 @@ services:
   rae-am-postgres:
     image: ankane/pgvector:latest
     container_name: rae-am-postgres
+    restart: always
     ports:
       - "5432:5432"
     environment:
@@ -16,6 +17,7 @@ services:
   rae-am-redis:
     image: redis:7-alpine
     container_name: rae-am-redis
+    restart: always
     ports:
       - "6379:6379"
     volumes:
@@ -26,6 +28,7 @@ services:
   rae-am-qdrant:
     image: qdrant/qdrant:latest
     container_name: rae-am-qdrant
+    restart: always
     ports:
       - "6333:6333"
     volumes:
@@ -38,6 +41,7 @@ services:
       context: .
       dockerfile: ./packages/rae-agentic-memory/Dockerfile
     container_name: rae-memory
+    restart: always
     ports:
       - "8000:8000"
     environment:
@@ -60,6 +64,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rae-suite
+    restart: always
     ports:
       - "8009:8009"
     environment:
@@ -75,11 +80,12 @@ services:
       context: .
       dockerfile: ./packages/rae-lab/Dockerfile
     container_name: rae-lab
+    restart: always
     ports:
       - "8011:8011"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app/packages/rae-lab/src:/app
     depends_on:
       - rae-suite
     networks:
@@ -90,6 +96,7 @@ services:
       context: .
       dockerfile: ./packages/rae-quality/Dockerfile
     container_name: rae-quality
+    restart: always
     ports:
       - "8010:8010"
     environment:
@@ -107,6 +114,7 @@ services:
       context: .
       dockerfile: ./packages/rae-phoenix/Dockerfile
     container_name: rae-phoenix
+    restart: always
     ports:
       - "8012:8012"
     environment:
@@ -124,6 +132,7 @@ services:
       context: .
       dockerfile: ./packages/rae-hive/Dockerfile
     container_name: rae-hive
+    restart: always
     ports:
       - "8013:8013"
     environment:
@@ -133,6 +142,20 @@ services:
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
+    networks:
+      - rae-internal
+
+  rae-openclaw:
+    build:
+      context: ./packages/rae-open-claw
+      dockerfile: Dockerfile.rae
+    container_name: rae-openclaw
+    restart: always
+    ports:
+      - "18789:18789"
+    volumes:
+      - ./.openclaw_config:/root/.openclaw
+    command: ["node", "dist/index.js", "gateway"]
     networks:
       - rae-internal
 
