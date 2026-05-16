@@ -48,7 +48,7 @@ services:
       - POSTGRES_PASSWORD=rae
       - REDIS_HOST=rae-am-redis
       - QDRANT_HOST=rae-am-qdrant
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
     depends_on:
       - rae-am-postgres
       - rae-am-redis
@@ -64,7 +64,7 @@ services:
       - "8009:8009"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
     depends_on:
       - rae-memory
     networks:
@@ -79,7 +79,7 @@ services:
       - "8011:8011"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app/packages/rae-lab/src:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
     depends_on:
       - rae-suite
     networks:
@@ -94,7 +94,7 @@ services:
       - "8010:8010"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
     volumes:
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     depends_on:
@@ -111,7 +111,7 @@ services:
       - "8012:8012"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
     volumes:
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
@@ -128,7 +128,7 @@ services:
       - "8013:8013"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/src:/app
     volumes:
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
