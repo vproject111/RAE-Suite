@@ -1,17 +1,18 @@
 # RAE-Suite Factory Modules (v4.8) - SERVICE MODE WITH HEALTHCHECKS
 services:
   rae-hive:
-    build: ../RAE-Hive_eyes
+    build: ./packages/rae-hive
     container_name: rae-hive
     command: python hive_engine.py
     restart: unless-stopped
     environment:
-      - RAE_API_URL=http://rae-api-dev:8000
+      - RAE_API_URL=http://rae-memory:8000
     volumes:
-      - ../RAE-Hive_eyes:/app
-      - ../RAE-Lab/experiments:/app/experiments
-      - ../RAE-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-hive:/app
+      - ./packages/rae-lab/experiments:/app/experiments
+      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
       - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt/extra_storage/dreamsoft_factory:/projects
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
       interval: 30s
@@ -21,16 +22,17 @@ services:
       - rae-internal
 
   rae-phoenix:
-    build: ../RAE-Phoenix
+    build: ./packages/rae-phoenix
     container_name: rae-phoenix
     command: python main.py
     restart: unless-stopped
     environment:
-      - RAE_API_URL=http://rae-api-dev:8000
+      - RAE_API_URL=http://rae-memory:8000
     volumes:
-      - ../RAE-Phoenix:/app
-      - ../RAE-Lab/experiments:/app/experiments
-      - ../RAE-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-phoenix:/app
+      - ./packages/rae-lab/experiments:/app/experiments
+      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - /mnt/extra_storage/dreamsoft_factory:/projects
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
       interval: 30s
@@ -40,16 +42,16 @@ services:
       - rae-internal
 
   rae-quality:
-    build: ../RAE-Quality
+    build: ./packages/rae-quality
     container_name: rae-quality
     restart: unless-stopped
     command: python main.py
     environment:
-      - RAE_API_URL=http://rae-api-dev:8000
+      - RAE_API_URL=http://rae-memory:8000
     volumes:
-      - ../RAE-Quality:/app
-      - ../RAE-agentic-memory/rae-core/rae_core:/app/rae_core
-      - /home/print/cloud:/projects:ro
+      - ./packages/rae-quality:/app
+      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
       interval: 30s
@@ -59,16 +61,16 @@ services:
       - rae-internal
 
   rae-lab:
-    build: ../RAE-Lab
+    build: ./packages/rae-lab
     container_name: rae-lab
     restart: unless-stopped
     command: python metrics_aggregator.py
     environment:
-      - RAE_API_URL=http://rae-api-dev:8000
+      - RAE_API_URL=http://rae-memory:8000
     volumes:
-      - ../RAE-Lab:/app
-      - ../RAE-Lab/experiments:/app/experiments
-      - ../RAE-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-lab:/app
+      - ./packages/rae-lab/experiments:/app/experiments
+      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
       interval: 30s
@@ -79,5 +81,4 @@ services:
 
 networks:
   rae-internal:
-    external: true
     name: rae-internal
