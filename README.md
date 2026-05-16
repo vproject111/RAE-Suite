@@ -18,9 +18,41 @@ The system consists of 5 specialized modules connected into a single neural netw
 *   **Telemetry**: Full operational metric coverage displayed in a central Grafana dashboard.
 
 ## 🚀 Quick Start
+
+Follow these steps to deploy the entire Silicon Oracle RAE Suite on your system.
+
+### 1. Clone the repository
+Ensure you clone recursively to include all specialized agent submodules:
 ```bash
-# Launch the entire Factory
-docker compose -f docker-compose.suite.yml up -d
+git clone --recursive https://github.com/dreamsoft-pro/RAE-Suite.git
+cd RAE-Suite
+```
+
+### 2. Configure Environment
+Create a `.env` file with the following default configuration:
+```bash
+cat <<EOT > .env
+RAE_PROFILE=dev
+POSTGRES_USER=rae
+POSTGRES_PASSWORD=rae
+POSTGRES_DB=rae
+RAE_API_URL=http://rae-memory:8000
+QDRANT_URL=http://rae-am-qdrant:6333
+REDIS_URL=redis://rae-am-redis:6379/0
+RAE_PROJECT_NAME=dreamsoft_factory
+EOT
+```
+
+### 3. Launch the Factory
+Run the following command to build the agentic images and start all services:
+```bash
+docker compose up -d --build
+```
+
+## ✅ Verification
+Check if all containers are running correctly:
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
 ---
