@@ -148,14 +148,28 @@ services:
   rae-openclaw:
     build:
       context: ./packages/rae-open-claw
-      dockerfile: Dockerfile.rae
+      dockerfile: ../../infra/openclaw/Dockerfile.rae
     container_name: rae-openclaw
     restart: always
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "18789:18789"
+    command: ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
+    environment:
+      - RAE_API_URL=http://rae-memory:8000
+      - RAE_TENANT_ID=53717286-fe94-4c8f-baf9-c4d2758eb672
+      - RAE_PROJECT_NAME=dreamsoft_factory
+      - NODE_ENV=production
     volumes:
-      - ./.openclaw_config:/root/.openclaw
-    command: ["node", "dist/index.js", "gateway"]
+      # Hard Frames: Code remains internal to the image (no /app mount)
+      - ./.openclaw_config:/home/node/.openclaw:rw
+      - /tmp:/tmp:rw
+      # Project access
+      - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     networks:
       - rae-internal
 
