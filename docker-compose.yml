@@ -48,9 +48,7 @@ services:
       - POSTGRES_PASSWORD=rae
       - REDIS_HOST=rae-am-redis
       - QDRANT_HOST=rae-am-qdrant
-      - PYTHONPATH=/app
-    volumes:
-      - /mnt/extra_storage/unified_rae_core/rae_core:/app/rae_core
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
     depends_on:
       - rae-am-postgres
       - rae-am-redis
@@ -66,9 +64,7 @@ services:
       - "8009:8009"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
-    volumes:
-      - /mnt/extra_storage/unified_rae_core/rae_core:/app/rae_core
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
     depends_on:
       - rae-memory
     networks:
@@ -83,10 +79,7 @@ services:
       - "8011:8011"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/src:/app
-    volumes:
-      - /mnt/extra_storage/unified_rae_core/rae_core:/app/rae_core
-      - ./packages/rae-lab/src:/app/src
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app/packages/rae-lab/src:/app
     depends_on:
       - rae-suite
     networks:
@@ -101,9 +94,8 @@ services:
       - "8010:8010"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
     volumes:
-      - /mnt/extra_storage/unified_rae_core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     depends_on:
       - rae-suite
@@ -119,9 +111,8 @@ services:
       - "8012:8012"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
     volumes:
-      - /mnt/extra_storage/unified_rae_core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
@@ -137,9 +128,8 @@ services:
       - "8013:8013"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/packages/rae-agentic-memory/rae-core/rae_core:/app
     volumes:
-      - /mnt/extra_storage/unified_rae_core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
