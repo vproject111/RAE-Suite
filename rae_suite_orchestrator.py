@@ -8,6 +8,7 @@ import structlog
 import hashlib
 from datetime import datetime
 from typing import Dict, Any, List
+from core.infra_reconciler import InfraReconciler
 
 try:
     from rae_libs.rae_core.utils.memory_bridge import RAEMemoryBridge
@@ -37,6 +38,9 @@ class RAE_CEO_Orchestrator:
         self.factory_spec_path = os.getenv("FACTORY_SPEC_PATH", "factory.yaml")
         # Unified Bridge
         self.bridge = RAEMemoryBridge(project_name="rae-suite-ceo")
+        
+        # Infra Reconciler
+        self.infra_reconciler = InfraReconciler()
 
     async def run_loop(self):
         logger.info("orchestrator_booted", role="CEO_Agent", mode="Declarative Reconciler")
