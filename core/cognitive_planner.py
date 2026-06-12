@@ -90,6 +90,7 @@ class CognitivePlanner:
     Cognitive Planner implementing Monte Carlo Tree Search (MCTS) and Tree of Thoughts (ToT).
     Generates distinct hypotheses, runs a Self-Critique loop against constitutional/codebase constraints,
     and returns the highest win-probability plan.
+    Supports Test-Time Compute scaling (Adaptive Search Depth) and Process-Supervised step evaluation (PRM).
     """
     def __init__(self, constitution_path: Optional[str] = None):
         self.constitution_path = constitution_path
@@ -102,6 +103,60 @@ class CognitivePlanner:
             "Relative project paths only (No hardcoded absolute paths)",
             "No dependencies on heavy libraries like sentence-transformers"
         ]
+
+    def _determine_iterations(self, risk_class: RiskClass, intent: str) -> int:
+        """
+        Adaptive Search Depth (Meta-Reasoning).
+        Dynamically adjusts the MCTS iteration budget based on the RiskClass and intent complexity.
+        """
+        base_map = {
+            RiskClass.R0: 10,
+            RiskClass.R1: 20,
+            RiskClass.R2: 30,
+            RiskClass.R3: 50,
+            RiskClass.R4: 80,
+            RiskClass.R5: 150,
+            RiskClass.R6: 250,
+        }
+        iterations = base_map.get(risk_class, 20)
+
+        # Boost depth for complex intents indicating key risk/optimization areas
+        intent_lower = intent.lower()
+        boost_keywords = ["optimize", "refactor", "security", "mutate", "performance", "compile", "kernel", "core", "prm", "autonomy"]
+        if any(kw in intent_lower for kw in boost_keywords):
+            iterations = int(iterations * 1.5)
+
+        logger.info(
+            "adaptive_search_depth_configured",
+            risk_class=risk_class,
+            intent=intent,
+            iterations=iterations
+        )
+        return iterations
+
+    def _evaluate_step_prm(self, step_name: str, step_description: str) -> float:
+        """
+        Process-Supervised Reward Model (PRM) evaluator.
+        Provides a step-level verification reward signal (0.0 to 1.0)
+        by analyzing individual execution action steps.
+        """
+        score = 1.0
+        step_lower = step_name.lower() + " " + step_description.lower()
+
+        # Step-level risk indicators
+        if "absolute path" in step_lower or "/home" in step_lower:
+            score -= 0.5  # High penalty for absolute paths coupling
+        if "force" in step_lower or "bypass" in step_lower:
+            score -= 0.3  # Penalty for unsafe/forced execution patterns
+        if "compile" in step_lower or "rust" in step_lower or "c-extension" in step_lower:
+            # Requires compilation - check if sandbox verification is mentioned
+            if "sandbox" not in step_lower and "verification" not in step_lower:
+                score -= 0.4  # Unverified native builds are risky
+        if "token" in step_lower or "credential" in step_lower or "secret" in step_lower:
+            if "redact" not in step_lower and "secure" not in step_lower:
+                score -= 0.5  # Risk of credential exposure
+
+        return max(0.0, score)
 
     def _generate_hypotheses(self, intent: str) -> List[Dict[str, str]]:
         """
@@ -275,11 +330,12 @@ class CognitivePlanner:
         for child in root.children:
             child.add_child(name="Step 1: Setup Worktree", state_type="action_step", description="Create branch and isolated sandbox.")
             child.add_child(name="Step 2: Apply Patch", state_type="action_step", description=f"Implement: {child.description}")
-            child.add_child(name="Step 3: Verification", state_type="action_step", description="Run coverage and compliance checks.")
+            child.add_child(name="Step 3: Verification", state_type="action_step", description="Run coverage and compliance checks in sandbox.")
 
-        # 4. Simulation / Rollout & Critique Phase
-        # Run 20 MCTS iterations to build statistics
-        iterations = 20
+        # 4. Determine adaptive iteration count (Test-Time Compute)
+        iterations = self._determine_iterations(risk_class, intent)
+
+        # 5. Simulation / Rollout & Critique Phase
         for _ in range(iterations):
             # Selection
             node = root
@@ -291,6 +347,11 @@ class CognitivePlanner:
             constraints_feedback = self._evaluate_constraints(node.description)
             score_delta = sum(item["score_impact"] for item in constraints_feedback)
             viability_score = max(0.0, min(1.0, base_viability + score_delta))
+
+            # Process-Supervised step-level feedback evaluation
+            if node.state_type == "action_step":
+                prm_reward = self._evaluate_step_prm(node.name, node.description)
+                viability_score = (viability_score + prm_reward) / 2.0
 
             # Format critique feedback details
             feedback_bullets = []
@@ -306,7 +367,7 @@ class CognitivePlanner:
                 temp_node.value += viability_score
                 temp_node = temp_node.parent
 
-        # 5. Compile PlannerBranches and select highest score
+        # 6. Compile PlannerBranches and select highest score
         branches = []
         best_branch = None
         highest_score = -1.0
