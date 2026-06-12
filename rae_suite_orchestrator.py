@@ -9,6 +9,9 @@ import hashlib
 from datetime import datetime
 from typing import Dict, Any, List
 from core.infra_reconciler import InfraReconciler
+from core.autonomy_kernel import AutonomyKernel
+from core.curiosity_engine import CuriosityEngine
+import uuid
 
 try:
     from rae_libs.rae_core.utils.memory_bridge import RAEMemoryBridge
@@ -42,6 +45,10 @@ class RAE_CEO_Orchestrator:
         # Infra Reconciler
         self.infra_reconciler = InfraReconciler()
 
+        # Autonomy Kernel (Silicon Oracle v6.8)
+        self.kernel = AutonomyKernel(bridge=self.bridge, repo_root=".")
+        self.curiosity_engine = CuriosityEngine(kernel=self.kernel, repo_root=".")
+
     async def run_loop(self):
         logger.info("orchestrator_booted", role="CEO_Agent", mode="Declarative Reconciler")
         self.bridge.save_event("Orkiestrator CEO został uruchomiony w trybie deklaratywnego Reconcilera.", layer="episodic")
@@ -74,6 +81,7 @@ class RAE_CEO_Orchestrator:
                         self.last_action_time = datetime.utcnow()
                     else:
                         logger.info("system_fully_aligned_and_stable")
+                        await self.curiosity_engine.trigger_idle_scan()
 
             except Exception as e:
                 logger.error("reconciliation_cycle_failed", error=str(e))
@@ -194,22 +202,21 @@ class RAE_CEO_Orchestrator:
         )
 
     async def _dispatch_action(self, decision: Dict[str, Any]):
-        """Dispatches commands dynamically using the Memory Bridge interface."""
+        """Dispatches commands via the Autonomy Kernel to enforce lifecycle and auditability."""
         agent = decision.get("agent")
         reasoning = decision.get("reasoning")
         
         logger.warning("ceo_dispatching_orders", target=agent, reason=reasoning)
         
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(f"{self.api_url}/v2/bridge/interact", json={
-                    "intent": "EXECUTE_STRATEGY",
-                    "source_agent": "rae-suite-ceo",
-                    "target_agent": agent,
-                    "payload": {"instruction": reasoning}
-                }, timeout=5.0)
-        except Exception as e:
-            logger.error("dispatch_failed", error=str(e))
+        # Enforce Silicon Oracle v6.8 Lifecycle
+        receipt = await self.kernel.execute_task(
+            goal_id=f"goal-{datetime.utcnow().strftime('%Y%m%d%H%M')}",
+            task_id=f"task-{uuid.uuid4().hex[:8]}",
+            intent=reasoning, # Using reasoning as intent for risk classification
+            payload={"target_agent": agent, "instruction": reasoning}
+        )
+        
+        logger.info("task_lifecycle_completed", receipt_id=receipt.receipt_id, status=receipt.execution_status)
 
 if __name__ == "__main__":
     orchestrator = RAE_CEO_Orchestrator()
