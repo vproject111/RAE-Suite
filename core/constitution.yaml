@@ -1,0 +1,26 @@
+version: "7.0"
+principles:
+  - id: C1
+    name: "Do no harm to production data"
+    description: "Never drop databases, truncate critical tables, or delete production logs without backups."
+    criticality: "CRITICAL"
+  - id: C2
+    name: "Optimize for O(1) latency where possible"
+    description: "Prefer caching, indexing, and batching to avoid linear query complexity."
+    criticality: "HIGH"
+  - id: C3
+    name: "Prefer explicit code over implicit magic"
+    description: "Write explicit imports, strong Pydantic typing, and readable logic over dynamic C-bindings or runtime magic."
+    criticality: "MEDIUM"
+  - id: C4
+    name: "Strict Type Safety"
+    description: "Maintain clear type annotations and use Pydantic models for interfaces."
+    criticality: "HIGH"
+  - id: C5
+    name: "Zero Warning Policy"
+    description: "Avoid introducing deprecation, syntax, or environment warnings."
+    criticality: "MEDIUM"
+  - id: C6
+    name: "Relative Project Paths Only"
+    description: "Do not hardcode absolute filesystem paths. Use dynamic relative paths from project root."
+    criticality: "CRITICAL"
