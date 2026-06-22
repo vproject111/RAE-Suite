@@ -12,8 +12,17 @@ done
 
 # Check if RAE_DATA_DIR is configured
 if [ ! -f .env ] || ! grep -q "RAE_DATA_DIR" .env; then
-    echo "⚠️  RAE-Suite is not configured! Starting interactive setup..."
-    ./setup.sh
+    if [ -t 0 ]; then
+        echo "⚠️  RAE-Suite is not configured! Starting interactive setup..."
+        ./setup.sh
+    else
+        echo "⚠️  RAE-Suite is not configured and running non-interactively. Appending defaults to .env..."
+        touch .env
+        sed -i '/RAE_DATA_DIR/d' .env
+        sed -i '/RAE_SEARCH_STRATEGY/d' .env
+        echo "RAE_DATA_DIR=$(pwd)/packages/rae-agentic-memory/data" >> .env
+        echo "RAE_SEARCH_STRATEGY=hybrid" >> .env
+    fi
 fi
 
 # Load variables
