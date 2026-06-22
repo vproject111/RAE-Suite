@@ -7,7 +7,7 @@
 	url = https://github.com/dreamsoft-pro/RAE-Phenix.git
 [submodule "packages/rae-hive"]
 	path = packages/rae-hive
-	url = https://github.com/dreamsoft-pro/RAE-Hive
+	url = ../RAE-Hive.git
 	branch = main
 [submodule "packages/rae-quality"]
 	path = packages/rae-quality
