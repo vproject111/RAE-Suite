@@ -47,7 +47,7 @@ done
 
 echo -e "\n✅ RAE Memory API is ONLINE."
 echo "🔄 Running Database Migrations..."
-docker exec rae-memory alembic upgrade head
+docker compose exec -T rae-memory alembic upgrade head
 
 echo "✨ RAE Suite v3 Ultra is fully operational!"
 docker ps
