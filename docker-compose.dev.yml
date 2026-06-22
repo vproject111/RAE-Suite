@@ -1,4 +1,4 @@
-# RAE-Suite Master Orchestrator - DEV HOTRELOAD
+# RAE-Suite Control Plane - DEV HOTRELOAD
 include:
   - path: ../RAE-agentic-memory/docker-compose.dev.yml
   - path: ../RAE-Hive_eyes/docker-compose.dev.yml
@@ -14,4 +14,64 @@ services:
       - RAE_PROFILE=dev
     volumes:
       - .:/app
-      - ../RAE-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/src/rae_core:/app/rae_core
+
+  rae-lab:
+    ports: !override
+      - "8011:8000"
+
+  rae-quality:
+    ports: !override
+      - "8010:8000"
+
+  rae-phoenix:
+    ports: !override
+      - "8012:8000"
+
+  rae-hive:
+    ports: !override
+      - "8013:8000"
+
+  # Directly override the production service to run in DEV mode with hot-reload
+  rae-memory:
+    pull_policy: build
+    build:
+      context: ./packages/rae-agentic-memory
+      args:
+        - BASE_IMAGE=python:3.14-slim
+        - INSTALL_ML=false
+    container_name: rae-memory
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./packages/rae-agentic-memory:/app
+      - ./packages/rae-core/src/rae_core:/opt/venv/lib/python3.14/site-packages/rae_core
+      - ./packages/rae-agentic-memory/rae_adapters:/opt/venv/lib/python3.14/site-packages/rae_adapters
+    environment:
+      - RAE_PROFILE=laptop
+      - RAE_DB_MODE=migrate
+      - WATCHFILES_FORCE_POLLING=true
+      - RAE_API_URL=http://localhost:8000
+      - POSTGRES_HOST=rae-am-postgres
+      - POSTGRES_DB=rae
+      - POSTGRES_USER=rae
+      - POSTGRES_PASSWORD=rae_password
+      - REDIS_HOST=rae-am-redis
+      - QDRANT_HOST=rae-am-qdrant
+      - PYTHONPATH=/app
+    depends_on:
+      rae-am-postgres:
+        condition: service_healthy
+    networks:
+      - rae-internal
+    command: uvicorn apps.memory_api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Disable conflicting standalone API from the included memory dev profile
+  rae-api-dev:
+    scale: 0
+    container_name: rae-api-dev-disabled
+
+  # Disable conflicting standalone Qdrant from the included memory dev profile
+  rae-qdrant:
+    scale: 0

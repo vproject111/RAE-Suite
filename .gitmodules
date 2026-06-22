@@ -8,7 +8,7 @@
 [submodule "packages/rae-hive"]
 	path = packages/rae-hive
 	url = ../RAE-Hive.git
-	branch = main
+	branch = develop
 [submodule "packages/rae-quality"]
 	path = packages/rae-quality
 	url = https://github.com/dreamsoft-pro/RAE-Quality.git
