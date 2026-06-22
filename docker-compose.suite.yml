@@ -10,7 +10,7 @@ services:
     volumes:
       - ./packages/rae-hive:/app
       - ./packages/rae-lab/experiments:/app/experiments
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/src/rae_core:/app/rae_core
       - /var/run/docker.sock:/var/run/docker.sock
       - /mnt/extra_storage/dreamsoft_factory:/projects
     healthcheck:
@@ -31,7 +31,7 @@ services:
     volumes:
       - ./packages/rae-phoenix:/app
       - ./packages/rae-lab/experiments:/app/experiments
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/src/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
@@ -50,7 +50,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
     volumes:
       - ./packages/rae-quality:/app
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/src/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
@@ -70,7 +70,7 @@ services:
     volumes:
       - ./packages/rae-lab:/app
       - ./packages/rae-lab/experiments:/app/experiments
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/src/rae_core:/app/rae_core
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
       interval: 30s

@@ -1,38 +1,35 @@
 services:
   rae-am-postgres:
     image: ankane/pgvector:latest
-    container_name: rae-am-postgres
     restart: always
     ports:
       - "5432:5432"
     environment:
       - POSTGRES_DB=rae
       - POSTGRES_USER=rae
-      - POSTGRES_PASSWORD=rae
+      - POSTGRES_PASSWORD=rae_password
     volumes:
-      - rae-memory-db-data:/var/lib/postgresql/data
+      - ${RAE_DATA_DIR:-../RAE-agentic-memory/data}/postgres:/var/lib/postgresql/data
     networks:
       - rae-internal
 
   rae-am-redis:
     image: redis:7-alpine
-    container_name: rae-am-redis
     restart: always
     ports:
       - "6379:6379"
     volumes:
-      - rae-redis-cache-data:/data
+      - ${RAE_DATA_DIR:-../RAE-agentic-memory/data}/redis:/data
     networks:
       - rae-internal
 
   rae-am-qdrant:
     image: qdrant/qdrant:latest
-    container_name: rae-am-qdrant
     restart: always
     ports:
       - "6333:6333"
     volumes:
-      - rae-qdrant-vector-data:/qdrant/storage
+      - ${RAE_DATA_DIR:-../RAE-agentic-memory/data}/qdrant:/qdrant/storage
     networks:
       - rae-internal
 
@@ -40,8 +37,9 @@ services:
     build:
       context: ./packages/rae-agentic-memory
       dockerfile: Dockerfile
-    container_name: rae-memory
     restart: always
+    command: >
+      bash -c "alembic upgrade head && uvicorn apps.memory_api.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:
@@ -49,10 +47,11 @@ services:
       - POSTGRES_HOST=rae-am-postgres
       - POSTGRES_DB=rae
       - POSTGRES_USER=rae
-      - POSTGRES_PASSWORD=rae
+      - POSTGRES_PASSWORD=rae_password
       - REDIS_HOST=rae-am-redis
       - QDRANT_HOST=rae-am-qdrant
       - PYTHONPATH=/app
+      - ML_SERVICE_URL=
     depends_on:
       - rae-am-postgres
       - rae-am-redis
@@ -63,7 +62,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rae-suite
     restart: always
     ports:
       - "8009:8009"
@@ -71,7 +69,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
     volumes:
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
       - rae-memory
     networks:
@@ -81,7 +79,6 @@ services:
     build:
       context: .
       dockerfile: ./packages/rae-lab/Dockerfile
-    container_name: rae-lab
     restart: always
     ports:
       - "8011:8011"
@@ -89,7 +86,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app/src:/app
     volumes:
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
       - rae-suite
     networks:
@@ -99,7 +96,6 @@ services:
     build:
       context: .
       dockerfile: ./packages/rae-quality/Dockerfile
-    container_name: rae-quality
     restart: always
     ports:
       - "8010:8010"
@@ -107,7 +103,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
     volumes:
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     depends_on:
       - rae-suite
@@ -118,7 +114,6 @@ services:
     build:
       context: .
       dockerfile: ./packages/rae-phoenix/Dockerfile
-    container_name: rae-phoenix
     restart: always
     ports:
       - "8012:8012"
@@ -126,7 +121,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
     volumes:
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
@@ -137,7 +132,6 @@ services:
     build:
       context: .
       dockerfile: ./packages/rae-hive/Dockerfile
-    container_name: rae-hive
     restart: always
     ports:
       - "8013:8013"
@@ -145,7 +139,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
     volumes:
-      - ./packages/rae-agentic-memory/rae-core/rae_core:/app/rae_core
+      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
@@ -156,7 +150,6 @@ services:
     build:
       context: ./packages/rae-open-claw
       dockerfile: ../../infra/openclaw/Dockerfile.rae
-    container_name: rae-openclaw
     restart: always
     read_only: true
     security_opt:
@@ -179,13 +172,7 @@ services:
     networks:
       - rae-internal
 
-volumes:
-  rae-memory-db-data:
-    external: true
-  rae-redis-cache-data:
-    external: true
-  rae-qdrant-vector-data:
-    external: true
+# Local folder bindings used, named volumes block removed
 
 networks:
   rae-internal:
