@@ -1,1 +1,4 @@
-fastapi\nuvicorn\nhttpx\npydantic
+fastapi
+uvicorn
+httpx
+pydantic
