@@ -191,19 +191,57 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.C
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="rae-cloud-supervisor",
-                server_version="2.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
+    if os.environ.get("RAE_MCP_SSE") == "1":
+        import uvicorn
+        from fastapi import FastAPI, Request
+        from mcp.server.sse import SseServerTransport
+
+        app = FastAPI(title="rae-cloud-supervisor")
+        sse = SseServerTransport("/mcp/messages")
+
+        @app.get("/mcp/sse")
+        async def mcp_sse_endpoint(request: Request):
+            async with sse.connect_sse(request.scope, request.receive, request._send) as (read_stream, write_stream):
+                await server.run(
+                    read_stream,
+                    write_stream,
+                    InitializationOptions(
+                        server_name="rae-cloud-supervisor",
+                        server_version="2.1.0",
+                        capabilities=server.get_capabilities(
+                            notification_options=NotificationOptions(),
+                            experimental_capabilities={},
+                        ),
+                    ),
+                )
+
+        @app.post("/mcp/messages")
+        async def mcp_messages_endpoint(request: Request):
+            await sse.handle_post_message(request.scope, request.receive, request._send)
+
+        @app.get("/health")
+        def health():
+            return {"status": "healthy"}
+
+        port = int(os.environ.get("RAE_MCP_PORT", "8005"))
+        print(f"Starting SSE MCP Server on port {port}")
+        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+        server_uvicorn = uvicorn.Server(config)
+        await server_uvicorn.serve()
+    else:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="rae-cloud-supervisor",
+                    server_version="2.1.0",
+                    capabilities=server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
                 ),
-            ),
-        )
+            )
 
 if __name__ == "__main__":
     asyncio.run(main())

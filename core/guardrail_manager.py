@@ -31,7 +31,7 @@ class GuardrailManager:
             promoted=False
         )
         
-        logger.info("guardrail_candidate_registered", guardrail_id=record.guardrail_id)
+        logger.info(f"guardrail_candidate_registered: {record.guardrail_id}")
         self._log_audit_record(record, "Initial registration as candidate.")
         return record
 
@@ -43,7 +43,7 @@ class GuardrailManager:
         record.lifecycle_state = GuardrailLifecycleState.SHADOW
         record.created_at = datetime.now(timezone.utc) # Start shadow period
         
-        logger.info("guardrail_promoted_to_shadow", guardrail_id=record.guardrail_id)
+        logger.info(f"guardrail_promoted_to_shadow: {record.guardrail_id}")
         self._log_audit_record(record, "Promoted to 72h Shadow Mode period.")
         return record
 
@@ -64,7 +64,7 @@ class GuardrailManager:
         if is_matured and is_safe and no_conflicts:
             record.lifecycle_state = GuardrailLifecycleState.APPROVED_ACTIVE
             record.promoted = True
-            logger.info("guardrail_promotion_successful", guardrail_id=record.guardrail_id)
+            logger.info(f"guardrail_promotion_successful: {record.guardrail_id}")
             self._log_audit_record(record, "Promotion successful: Passed all safety and maturity gates.")
         else:
             reasons = []
@@ -72,7 +72,7 @@ class GuardrailManager:
             if not is_safe: reasons.append(f"High FP rate: {record.false_positive_rate:.4f} > {self.max_fp_rate}")
             if not no_conflicts: reasons.append(f"Policy conflicts: {record.policy_conflicts}")
             
-            logger.warning("guardrail_promotion_denied", guardrail_id=record.guardrail_id, reasons=reasons)
+            logger.warning(f"guardrail_promotion_denied: {record.guardrail_id}, reasons={reasons}")
             self._log_audit_record(record, f"Promotion denied: {'; '.join(reasons)}")
 
         return record

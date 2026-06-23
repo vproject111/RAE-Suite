@@ -132,11 +132,101 @@ class AutonomyKernel:
 
         # --- Execution Logic ---
         execution_status = ExecutionStatus.SUCCESS
-        
-        # Phoenix Self-Repair Trigger
-        if "fix" in intent.lower() or "repair" in intent.lower():
+        agent = payload.get("target_agent", "")
+
+        # 1. OpenClaw Escalation for high risk or explicit target
+        if agent == "rae-openclaw" or risk_assessment.risk_class >= RiskClass.R3:
+            import subprocess
+            import os
+            logger.info("escalating_to_openclaw", trace_id=trace_id, task_id=task_id)
+            self.bridge.save_event("Escalating task to OpenClaw (Hard Frames 2.1 sandbox).", layer="episodic")
+            
+            try:
+                # Resolve OpenClaw CLI entry point
+                claw_path = "packages/rae-open-claw/dist/index.js"
+                if not os.path.exists(claw_path):
+                    claw_path = "RAE-Suite/packages/rae-open-claw/dist/index.js"
+                
+                cmd = ["node", claw_path, "agent", "--message", intent]
+                
+                # --- Dynamic Compute Offloading Check ---
+                exec_host = os.getenv("EXECUTION_HOST", "local")
+                if exec_host != "local":
+                    ssh_user = os.getenv("EXECUTION_SSH_USER", "operator")
+                    remote_workspace = os.getenv("EXECUTION_REMOTE_WORKSPACE", "~/rae-node-agent")
+                    ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", f"{ssh_user}@{exec_host}"]
+                    remote_cmd_str = f"cd {remote_workspace} && " + " ".join(cmd)
+                    cmd = ssh_cmd + [remote_cmd_str]
+                    logger.info("offloading_compute_to_cluster", host=exec_host, cmd=cmd)
+                    self.bridge.save_event(f"Offloading computation task to cluster node: {exec_host}.", layer="episodic")
+
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if proc.returncode == 0:
+                    logger.info("openclaw_execution_success", output=proc.stdout)
+                    self.bridge.save_event("OpenClaw task execution succeeded.", layer="episodic")
+                    execution_status = ExecutionStatus.SUCCESS
+                else:
+                    logger.error("openclaw_execution_failed", error=proc.stderr)
+                    self.bridge.save_event(f"OpenClaw execution failed: {proc.stderr}", layer="episodic")
+                    execution_status = ExecutionStatus.FAILED
+            except Exception as e:
+                logger.error("openclaw_escalation_error", error=str(e))
+                self.bridge.save_event(f"OpenClaw escalation error: {e}", layer="episodic")
+                execution_status = ExecutionStatus.FAILED
+
+        # 2. Phoenix Self-Repair Trigger
+        elif "fix" in intent.lower() or "repair" in intent.lower():
             res = await self.phoenix.run_repair_loop(trace_id, "Error: regression detected", payload.get("target_file", "main.py"))
             execution_status = ExecutionStatus.SUCCESS if res["status"] == "SUCCESS" else ExecutionStatus.FAILED
+
+        # 3. Default Execution (standard fallback success)
+        else:
+            execution_status = ExecutionStatus.SUCCESS
+
+        # Hermes Escalation upon failure/deadlock
+        if execution_status == ExecutionStatus.FAILED:
+            import httpx
+            import os
+            logger.warning("execution_deadlock_detected_invoking_hermes", trace_id=trace_id)
+            self.bridge.save_event("Structural deadlock or failure detected. Invoking Hermes for architectural planning.", layer="episodic")
+            
+            try:
+                hermes_url = os.getenv("HERMES_API_URL", "http://localhost:8022")
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(f"{hermes_url}/v1/plan", json={
+                        "project": payload.get("project", "default"),
+                        "trace_id": trace_id,
+                        "error": f"Task execution failed for intent: {intent}",
+                        "context": {
+                            "intent": intent,
+                            "target_file": payload.get("target_file", "main.py")
+                        }
+                    }, timeout=10.0)
+                    
+                    if resp.status_code == 200:
+                        roadmap = resp.json().get("roadmap", {})
+                        logger.info("hermes_roadmap_generated", roadmap=roadmap)
+                        self.bridge.save_event("Hermes successfully generated architectural refactoring roadmap.", layer="episodic")
+                        payload["hermes_roadmap"] = roadmap
+                    else:
+                        logger.warning("hermes_api_failed", status=resp.status_code)
+                        payload["hermes_roadmap"] = {
+                            "steps": [
+                                "1. Break circular dependencies by extracting common types.",
+                                "2. Align module imports to use strict relative path formats."
+                            ]
+                        }
+                        self.bridge.save_event("Hermes API unavailable. Loaded fallback roadmap from local heuristics.", layer="episodic")
+            except Exception as e:
+                logger.error("hermes_invocation_error", error=str(e))
+                payload["hermes_roadmap"] = {
+                    "steps": [
+                        "1. Break circular dependencies by extracting common types.",
+                        "2. Align module imports to use strict relative path formats."
+                    ]
+                }
+                self.bridge.save_event(f"Hermes invocation failed: {e}. Fallback roadmap loaded.", layer="episodic")
         
         # If R3, interact with GitOps
         if risk_assessment.risk_class == RiskClass.R3 and execution_status == ExecutionStatus.SUCCESS:
