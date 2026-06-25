@@ -147,31 +147,69 @@ class AutonomyKernel:
                 if not os.path.exists(claw_path):
                     claw_path = "RAE-Suite/packages/rae-open-claw/dist/index.js"
                 
-                cmd = ["node", claw_path, "agent", "--message", intent]
+                local_cmd = ["node", claw_path, "agent", "--message", intent]
                 
-                # --- Dynamic Compute Offloading Check ---
+                # --- Dynamic Compute Offloading Check with Local Fallback ---
                 exec_host = os.getenv("EXECUTION_HOST", "local")
                 if exec_host != "local":
                     ssh_user = os.getenv("EXECUTION_SSH_USER", "operator")
                     remote_workspace = os.getenv("EXECUTION_REMOTE_WORKSPACE", "~/rae-node-agent")
                     ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", f"{ssh_user}@{exec_host}"]
-                    remote_cmd_str = f"cd {remote_workspace} && " + " ".join(cmd)
-                    cmd = ssh_cmd + [remote_cmd_str]
-                    logger.info("offloading_compute_to_cluster", host=exec_host, cmd=cmd)
+                    remote_cmd_str = f"cd {remote_workspace} && " + " ".join(local_cmd)
+                    remote_cmd = ssh_cmd + [remote_cmd_str]
+                    logger.info("offloading_compute_to_cluster", host=exec_host, cmd=remote_cmd)
                     self.bridge.save_event(f"Offloading computation task to cluster node: {exec_host}.", layer="episodic")
-
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-                
-                if proc.returncode == 0:
-                    logger.info("openclaw_execution_success", output=proc.stdout)
-                    self.bridge.save_event("OpenClaw task execution succeeded.", layer="episodic")
-                    execution_status = ExecutionStatus.SUCCESS
+                    
+                    try:
+                        proc = subprocess.run(remote_cmd, capture_output=True, text=True, timeout=300)
+                        if proc.returncode == 0:
+                            logger.info("openclaw_execution_success", output=proc.stdout)
+                            self.bridge.save_event("OpenClaw task execution succeeded on remote host.", layer="episodic")
+                            execution_status = ExecutionStatus.SUCCESS
+                        else:
+                            logger.warning(f"openclaw_remote_execution_failed_falling_back_locally: {proc.stderr}")
+                            self.bridge.save_event(f"Remote OpenClaw execution failed: {proc.stderr}. Falling back to local execution.", layer="episodic")
+                            # Fallback locally
+                            proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
+                            if proc.returncode == 0:
+                                logger.info("openclaw_local_fallback_success", output=proc.stdout)
+                                self.bridge.save_event("OpenClaw task execution succeeded locally after remote failure.", layer="episodic")
+                                execution_status = ExecutionStatus.SUCCESS
+                            else:
+                                logger.error(f"openclaw_local_fallback_failed: {proc.stderr}")
+                                self.bridge.save_event(f"Local OpenClaw fallback execution failed: {proc.stderr}", layer="episodic")
+                                execution_status = ExecutionStatus.FAILED
+                    except (subprocess.TimeoutExpired, Exception) as remote_err:
+                        logger.warning(f"openclaw_remote_execution_error_falling_back_locally: {remote_err}")
+                        self.bridge.save_event(f"Remote OpenClaw execution error: {remote_err}. Falling back to local execution.", layer="episodic")
+                        # Fallback locally
+                        try:
+                            proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
+                            if proc.returncode == 0:
+                                logger.info("openclaw_local_fallback_success", output=proc.stdout)
+                                self.bridge.save_event("OpenClaw task execution succeeded locally after remote exception.", layer="episodic")
+                                execution_status = ExecutionStatus.SUCCESS
+                            else:
+                                logger.error(f"openclaw_local_fallback_failed: {proc.stderr}")
+                                self.bridge.save_event(f"Local OpenClaw fallback execution failed: {proc.stderr}", layer="episodic")
+                                execution_status = ExecutionStatus.FAILED
+                        except Exception as local_err:
+                            logger.error(f"openclaw_local_execution_error: {local_err}")
+                            self.bridge.save_event(f"Local OpenClaw execution error: {local_err}", layer="episodic")
+                            execution_status = ExecutionStatus.FAILED
                 else:
-                    logger.error("openclaw_execution_failed", error=proc.stderr)
-                    self.bridge.save_event(f"OpenClaw execution failed: {proc.stderr}", layer="episodic")
-                    execution_status = ExecutionStatus.FAILED
+                    # Run locally from start
+                    proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
+                    if proc.returncode == 0:
+                        logger.info("openclaw_execution_success", output=proc.stdout)
+                        self.bridge.save_event("OpenClaw task execution succeeded.", layer="episodic")
+                        execution_status = ExecutionStatus.SUCCESS
+                    else:
+                        logger.error(f"openclaw_execution_failed: {proc.stderr}")
+                        self.bridge.save_event(f"OpenClaw execution failed: {proc.stderr}", layer="episodic")
+                        execution_status = ExecutionStatus.FAILED
             except Exception as e:
-                logger.error("openclaw_escalation_error", error=str(e))
+                logger.error(f"openclaw_escalation_error: {e}")
                 self.bridge.save_event(f"OpenClaw escalation error: {e}", layer="episodic")
                 execution_status = ExecutionStatus.FAILED
 
