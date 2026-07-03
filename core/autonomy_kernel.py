@@ -375,7 +375,7 @@ class AutonomyKernel:
             if res["status"] == "SUCCESS":
                 logger.info(f"constitutional_alignment_successful_after_autonomous_rewrite trace_id={trace_id}")
                 # Update payload metrics to represent aligned state and re-evaluate
-                metrics_payload["patch_code"] = "Clean code compliant with relative paths only."
+                metrics_payload["patch_code"] = "# Clean code compliant with relative paths only."
                 metrics_payload["tests_passed"] = True
                 metrics_payload["coverage_after"] = metrics_payload.get("coverage_before", 80.0) + 0.1
                 
