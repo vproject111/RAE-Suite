@@ -45,10 +45,10 @@ class SandboxManager:
             )
             return target_path
         except subprocess.CalledProcessError as e:
-            logger.error(f"worktree_creation_failed: {e.stderr.decode()}")
-            # Fallback to simple copy if git fails (e.g. in non-git sterile test env)
-            os.makedirs(target_path, exist_ok=True)
-            return target_path
+            err_msg = e.stderr.decode() if e.stderr else str(e)
+            logger.critical(f"worktree_creation_failed: {err_msg}")
+            raise RuntimeError(f"Fail-Closed Sandbox: Worktree creation failed: {err_msg}")
+
 
     def cleanup_sandbox(self, sandbox_path: str):
         """
