@@ -10,8 +10,10 @@ class ContextTrustEvaluator:
     Protects against memory poisoning by enforcing trust thresholds.
     """
     def __init__(self):
-        self.reject_threshold = 0.4
-        self.advisory_threshold = 0.7
+        import os
+        self.reject_threshold = float(os.getenv("RAE_CONTEXT_REJECT_THRESHOLD", "0.4"))
+        self.advisory_threshold = float(os.getenv("RAE_CONTEXT_ADVISORY_THRESHOLD", "0.7"))
+
 
     def evaluate_trust(self, memory_metadata: Dict[str, Any]) -> Tuple[float, str]:
         """
