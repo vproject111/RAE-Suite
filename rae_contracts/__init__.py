@@ -42,6 +42,9 @@ from rae_contracts.autonomy import (
     StateTransition,
     ExecutionReceipt,
     ContextEnvelope,
+    WorkflowStep,
+    WorkflowDefinition,
+    HandoffEnvelope,
 )
 
 __all__ = [
@@ -82,4 +85,7 @@ __all__ = [
     "StateTransition",
     "ExecutionReceipt",
     "ContextEnvelope",
+    "WorkflowStep",
+    "WorkflowDefinition",
+    "HandoffEnvelope",
 ]

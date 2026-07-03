@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from rae_contracts.maes import RiskClass, ExecutionMode, RedactionStatus
 
@@ -238,4 +238,37 @@ class ContextEnvelope(BaseModel):
     token_cost: int = 0
     retrieved_content: str
     allowed_uses: List[str] = Field(default_factory=list)
+
+class WorkflowStep(BaseModel):
+    step_id: str
+    capability: str
+    required_risk_class: RiskClass = RiskClass.R1
+    timeout_seconds: int = 120
+
+class WorkflowDefinition(BaseModel):
+    schema_version: str = "1.0"
+    workflow_id: str
+    name: str
+    version: str
+    entry_conditions: Dict[str, Any] = Field(default_factory=dict)
+    steps: List[WorkflowStep]
+    exit_conditions: Dict[str, Any] = Field(default_factory=dict)
+    rollback_workflow_id: Optional[str] = None
+
+class HandoffEnvelope(BaseModel):
+    schema_version: str = "1.0"
+    handoff_id: str
+    trace_id: str
+    parent_span_id: Optional[str] = None
+    source_module: str
+    target_module: str
+    required_capabilities: List[str] = Field(default_factory=list)
+    restricted_context_pack: Dict[str, Any] = Field(default_factory=dict)
+    input_artifacts: List[str] = Field(default_factory=list)
+    output_schema: Dict[str, Any] = Field(default_factory=dict)
+    token_budget: int = 50000
+    timeout_seconds: int = 300
+    information_class: str = "internal"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 

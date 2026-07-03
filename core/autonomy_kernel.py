@@ -8,7 +8,8 @@ from rae_contracts import (
     TaskState, RiskClass, RiskAssessment, DecisionType, 
     ExecutionStatus, QualityStatus, MemoryWritebackStatus,
     ExecutionMode, ExecutionReceipt, StateTransition,
-    DecisionLedgerEntry, PolicyBundle, CapabilityContract
+    DecisionLedgerEntry, PolicyBundle, CapabilityContract,
+    HandoffEnvelope
 )
 from core.policy_checker import RiskClassifier, PolicyChecker
 from core.gitops_daemon import GitOpsDaemon
@@ -285,7 +286,9 @@ class AutonomyKernel:
 
         # 2. Phoenix Self-Repair Trigger
         elif "fix" in intent.lower() or "repair" in intent.lower():
-            res = await self.phoenix.run_repair_loop(trace_id, "Error: regression detected", payload.get("target_file", "main.py"))
+            # Create Handoff Envelope for Phoenix
+            handoff = self._create_handoff_envelope(trace_id, "kernel", "rae-phoenix", ["phoenix.generate_patch"], payload)
+            res = await self.phoenix.run_repair_loop(trace_id, "Error: regression detected", handoff.restricted_context_pack.get("target_file", "main.py"))
             execution_status = ExecutionStatus.SUCCESS if res["status"] == "SUCCESS" else ExecutionStatus.FAILED
 
         # 3. Default Execution (standard fallback success)
@@ -345,6 +348,9 @@ class AutonomyKernel:
         transition(TaskState.VERIFYING, "Execution artifacts verified.")
 
         # 9. QUALITY_GATE
+        # Enforce Handoff Envelope for Quality Gate
+        handoff_quality = self._create_handoff_envelope(trace_id, "kernel", "rae-quality", ["quality.evaluate_patch"], payload)
+        
         # Enforce Silicon Oracle v7.0 Quality Standards and Constitution
         metrics_payload = payload.get("metrics", {"tests_passed": True, "coverage_before": 80.0, "coverage_after": 80.1})
         if "patch_code" not in metrics_payload:
@@ -464,3 +470,31 @@ class AutonomyKernel:
         )
         
         return receipt
+
+    def _create_handoff_envelope(self, trace_id: str, source: str, target: str, required_caps: List[str], payload: Dict[str, Any]) -> HandoffEnvelope:
+        import uuid
+        # Restrict context pack (Handoff envelope context isolation)
+        restricted_context = {}
+        if "historical_context" in payload:
+            # Only handoff internal or public context, never RESTRICTED context unless target is authorized
+            restricted_context["historical_context"] = [
+                ctx for ctx in payload["historical_context"]
+                if ctx.get("information_class", "internal") != "restricted" or target == "rae-openclaw"
+            ]
+        if "target_file" in payload:
+            restricted_context["target_file"] = payload["target_file"]
+            
+        handoff = HandoffEnvelope(
+            handoff_id=f"hnd-{uuid.uuid4().hex[:8]}",
+            trace_id=trace_id,
+            source_module=source,
+            target_module=target,
+            required_capabilities=required_caps,
+            restricted_context_pack=restricted_context,
+            token_budget=50000 if target != "rae-openclaw" else 200000,
+            timeout_seconds=300,
+            information_class=payload.get("information_class", "internal")
+        )
+        logger.info("handoff_envelope_created", handoff_id=handoff.handoff_id, target=target)
+        return handoff
+
