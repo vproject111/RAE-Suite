@@ -11,8 +11,24 @@ class PolicyChecker:
     def __init__(self):
         self.active_policy_bundle_hash = "sbx-default-policy-v7.0"
 
-    def check_compliance(self, action_record) -> bool:
+    def check_compliance(self, risk_assessment: RiskAssessment) -> bool:
+        # Check reasons for explicit violations of C1 or C6 constitution principles
+        for reason in risk_assessment.reasons:
+            if "Violates C1" in reason or "Violates C6" in reason:
+                return False
         return True
+
+    def evaluate_policy(self, risk_assessment: RiskAssessment) -> DecisionType:
+        if risk_assessment.risk_class == RiskClass.R6:
+            return DecisionType.QUARANTINE
+        elif risk_assessment.risk_class in [RiskClass.R4, RiskClass.R5]:
+            return DecisionType.NEEDS_APPROVAL
+        
+        if not self.check_compliance(risk_assessment):
+            return DecisionType.DENY
+            
+        return DecisionType.ALLOW
+
 
 class RiskClassifier:
     """

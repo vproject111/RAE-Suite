@@ -39,6 +39,45 @@ class AutonomyKernel:
         self.trust_evaluator = ContextTrustEvaluator()
         self.cognitive_planner = CognitivePlanner()
         self.active_policy_hash = "p-default-v6.8"
+        self.capability_contracts = {
+            "rae-phoenix": CapabilityContract(
+                contract_id="cap-phoenix",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2, RiskClass.R3],
+                allowed_tools=["git", "diff", "patch", "linter"],
+                denied_tools=["docker", "ssh", "drop", "truncate"],
+                secret_access_allowlist=[],
+                max_token_budget=100000,
+                max_execution_time_seconds=600
+            ),
+            "rae-hive": CapabilityContract(
+                contract_id="cap-hive",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2],
+                allowed_tools=["git", "shell", "run_test"],
+                denied_tools=["deploy", "ssh", "drop"],
+                secret_access_allowlist=[],
+                max_token_budget=50000,
+                max_execution_time_seconds=300
+            ),
+            "rae-quality": CapabilityContract(
+                contract_id="cap-quality",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1],
+                allowed_tools=["pytest", "ruff", "mypy", "ast"],
+                denied_tools=["git", "shell", "write"],
+                secret_access_allowlist=[],
+                max_token_budget=50000,
+                max_execution_time_seconds=300
+            ),
+            "rae-openclaw": CapabilityContract(
+                contract_id="cap-openclaw",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2, RiskClass.R3, RiskClass.R4, RiskClass.R5],
+                allowed_tools=["ssh", "docker", "git", "shell"],
+                denied_tools=["drop"],
+                secret_access_allowlist=["prod_keys"],
+                max_token_budget=500000,
+                max_execution_time_seconds=1200
+            )
+        }
+
 
     async def execute_task(self, goal_id: str, task_id: str, intent: str, payload: Dict[str, Any]) -> ExecutionReceipt:
         trace_id = f"trace-{uuid.uuid4()}"
@@ -73,12 +112,7 @@ class AutonomyKernel:
         transition(TaskState.CLASSIFIED, f"Assessed as {risk_assessment.risk_class}")
 
         # 3. POLICY_CHECKED
-        # (Simplified logic for now)
-        policy_decision = DecisionType.ALLOW
-        if risk_assessment.risk_class == RiskClass.R6:
-            policy_decision = DecisionType.QUARANTINE
-        elif risk_assessment.risk_class in [RiskClass.R4, RiskClass.R5]:
-            policy_decision = DecisionType.NEEDS_APPROVAL
+        policy_decision = self.policy_checker.evaluate_policy(risk_assessment)
         
         transition(TaskState.POLICY_CHECKED, f"Policy decision: {policy_decision}")
 
@@ -97,8 +131,29 @@ class AutonomyKernel:
             )
 
         # 4. CAPABILITY_CHECKED
-        # (Mock check)
-        transition(TaskState.CAPABILITY_CHECKED, "Agent capabilities verified.")
+        agent_id = payload.get("target_agent", "rae-hive")
+        contract = self.capability_contracts.get(agent_id)
+        if not contract:
+            contract = CapabilityContract(
+                contract_id="cap-default",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2],
+                allowed_tools=["shell"],
+                denied_tools=[],
+                secret_access_allowlist=[],
+                max_token_budget=50000,
+                max_execution_time_seconds=300
+            )
+
+        if risk_assessment.risk_class not in contract.allowed_risk_classes:
+            transition(TaskState.REJECTED, f"Agent {agent_id} lacks capability for risk class {risk_assessment.risk_class}")
+            return self._finalize_receipt(
+                goal_id, task_id, trace_id, risk_assessment.risk_class, 
+                policy_decision, ExecutionStatus.REJECTED, TaskState.REJECTED, 
+                transitions, started_at
+            )
+            
+        transition(TaskState.CAPABILITY_CHECKED, f"Agent {agent_id} capabilities verified against {contract.contract_id}.")
+
 
         # 5. PLANNED
         cognitive_plan = None
