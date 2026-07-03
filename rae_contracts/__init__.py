@@ -46,6 +46,9 @@ from rae_contracts.autonomy import (
     WorkflowDefinition,
     HandoffEnvelope,
     OutcomeRecord,
+    VoteType,
+    ConsensusVote,
+    ConsensusProposal,
 )
 
 __all__ = [
@@ -90,4 +93,7 @@ __all__ = [
     "WorkflowDefinition",
     "HandoffEnvelope",
     "OutcomeRecord",
+    "VoteType",
+    "ConsensusVote",
+    "ConsensusProposal",
 ]

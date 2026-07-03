@@ -285,5 +285,26 @@ class OutcomeRecord(BaseModel):
     outcome_metrics: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class VoteType(str, Enum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    ABSTAIN = "ABSTAIN"
+
+class ConsensusVote(BaseModel):
+    agent_id: str
+    vote: VoteType
+    weight: float = 1.0
+    reasoning: str
+    signature: str
+
+class ConsensusProposal(BaseModel):
+    proposal_id: str
+    task_id: str
+    risk_class: RiskClass
+    votes: List[ConsensusVote] = Field(default_factory=list)
+    final_decision: Optional[VoteType] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 
 
