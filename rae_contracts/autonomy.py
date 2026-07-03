@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from rae_contracts.maes import RiskClass, ExecutionMode, RedactionStatus
 
@@ -221,3 +221,69 @@ class ExecutionReceipt(BaseModel):
     tool_versions: Dict[str, str] = Field(default_factory=dict, description="E.g. {'pytest': '8.2.0'}")
     started_at: datetime
     finished_at: datetime
+
+class ContextEnvelope(BaseModel):
+    schema_version: str = "1.0"
+    context_id: str
+    source_type: str = Field("memory", description="Source indicator, e.g. 'memory', 'file', 'user'")
+    source_uri: str
+    source_hash: str
+    trust_score: float = Field(0.5, ge=0.0, le=1.0)
+    information_class: str = Field("internal", description="public, internal, confidential, restricted")
+    tenant_id: str
+    project_id: str
+    memory_layer: str = Field("working", description="sensory, episodic, working, semantic, long_term, reflective")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    valid_until: datetime
+    token_cost: int = 0
+    retrieved_content: str
+    allowed_uses: List[str] = Field(default_factory=list)
+
+class WorkflowStep(BaseModel):
+    step_id: str
+    capability: str
+    required_risk_class: RiskClass = RiskClass.R1
+    timeout_seconds: int = 120
+
+class WorkflowDefinition(BaseModel):
+    schema_version: str = "1.0"
+    workflow_id: str
+    name: str
+    version: str
+    entry_conditions: Dict[str, Any] = Field(default_factory=dict)
+    steps: List[WorkflowStep]
+    exit_conditions: Dict[str, Any] = Field(default_factory=dict)
+    rollback_workflow_id: Optional[str] = None
+
+class HandoffEnvelope(BaseModel):
+    schema_version: str = "1.0"
+    handoff_id: str
+    trace_id: str
+    parent_span_id: Optional[str] = None
+    source_module: str
+    target_module: str
+    required_capabilities: List[str] = Field(default_factory=list)
+    restricted_context_pack: Dict[str, Any] = Field(default_factory=dict)
+    input_artifacts: List[str] = Field(default_factory=list)
+    output_schema: Dict[str, Any] = Field(default_factory=dict)
+    token_budget: int = 50000
+    timeout_seconds: int = 300
+    information_class: str = "internal"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class OutcomeRecord(BaseModel):
+    schema_version: str = "1.0"
+    trace_id: str
+    span_id: str
+    parent_span_id: Optional[str] = None
+    goal_id: str
+    task_id: str
+    risk_class: RiskClass
+    execution_status: ExecutionStatus
+    execution_time_seconds: float
+    token_cost: int = 0
+    outcome_metrics: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+
