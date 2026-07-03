@@ -498,6 +498,20 @@ class AutonomyKernel:
             layer="reflective"
         )
 
+        # Model Economy Routing: Map task risk classes to optimal models & providers
+        # High Risk (R3+) -> Heavy SOTA Reasoning Models (OpenRouter / GPT-5 / Claude 3 Opus)
+        # Medium Risk (R2) -> Standard Coding Models (OpenCode Zen / Claude 3.5 Sonnet)
+        # Low Risk (R0/R1) -> Cheap/Fast Heuristics & Local Models (OpenCode Go / Kimi)
+        if risk_class in [RiskClass.R6, RiskClass.R5, RiskClass.R4, RiskClass.R3]:
+            selected_provider = "openrouter"
+            selected_model = "openai/gpt-5.1-codex"
+        elif risk_class == RiskClass.R2:
+            selected_provider = "opencode"
+            selected_model = "claude-opus-4-6"
+        else:
+            selected_provider = "opencode-go"
+            selected_model = "kimi-k2.5"
+
         receipt = ExecutionReceipt(
             receipt_id=f"rec-{uuid.uuid4()}",
             goal_id=goal_id,
@@ -516,12 +530,13 @@ class AutonomyKernel:
             memory_writeback_status=MemoryWritebackStatus.COMPLETED,
             final_state=final_state,
             state_transitions=transitions,
-            llm_provider="rae-internal",
-            llm_model="silicon-oracle-v6.8",
+            llm_provider=selected_provider,
+            llm_model=selected_model,
             prompt_template_version="v1.5",
             started_at=started_at,
             finished_at=finished_at
         )
+
         
         # Log to bridge
         self.bridge.log_decision(
