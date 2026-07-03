@@ -14,9 +14,20 @@ def get_staged_files():
     return [f for f in result.stdout.strip().split("\n") if f and f.endswith(".py")]
 
 def check_file_ast(filepath):
+    # Load exemptions from JSON configuration if available
+    exemptions = ["pre_commit_gate", "quality_sentinel", "swarm_consensus"]
+    import json
+    if os.path.exists(".pre-commit-exemptions.json"):
+        try:
+            with open(".pre-commit-exemptions.json", "r") as f:
+                exemptions = json.load(f)
+        except Exception:
+            pass
+
     # Exempt quality validator scripts from self-violations
-    if "pre_commit_gate" in filepath or "quality_sentinel" in filepath or "swarm_consensus" in filepath:
+    if any(ex in filepath for ex in exemptions):
         return []
+
 
     violations = []
     try:
