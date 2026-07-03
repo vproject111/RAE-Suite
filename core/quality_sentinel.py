@@ -50,26 +50,13 @@ class QualitySentinel:
         # 3. Static Vulnerability Scan
         critical_vulns = metrics.get("critical_vulns", 0)
         
-        # 4. Constitutional AI Critique Checks
+        # 4. Constitutional AI Critique Checks (AST structural linting)
         patch_code = metrics.get("patch_code", "")
-        constitutional_violations = 0
         critique_details = []
-
         if patch_code:
-            # Check C6: Relative project paths only (No hardcoded absolute paths)
-            if any(path in patch_code for path in ["/home/", "/etc/", "/usr/local/bin/"]):
-                constitutional_violations += 1
-                critique_details.append("Violates C6: Found absolute filesystem path in code patch.")
-                
-            # Check C1: Do no harm to production data
-            if any(sql in patch_code.upper() for sql in ["DROP TABLE", "TRUNCATE TABLE", "DROP DATABASE"]):
-                constitutional_violations += 1
-                critique_details.append("Violates C1: Destructive database query command found.")
-                
-            # Check C3: Prefer explicit code over implicit magic (No heavy libraries)
-            if "sentence_transformers" in patch_code:
-                constitutional_violations += 1
-                critique_details.append("Violates C3: Prohibited import of sentence_transformers.")
+            critique_details = self.verify_ast_compliance(patch_code)
+        constitutional_violations = len(critique_details)
+
 
         # Determine Final Status
         status = QualityStatus.ACCEPT
@@ -103,3 +90,36 @@ class QualitySentinel:
         
         logger.info("quality_audit_completed", trace_id=trace_id, status=status)
         return result
+
+    def verify_ast_compliance(self, patch_code: str) -> List[str]:
+        """
+        Parses patch code into AST and inspects import statements and string literals
+        for C1/C3/C6 violations. Ensures strict compliance with Silicon Oracle v7.0.
+        """
+        import ast
+        violations = []
+        try:
+            tree = ast.parse(patch_code)
+            for node in ast.walk(tree):
+                # Check for imports
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "sentence_transformers":
+                            violations.append("AST Violates C3: Forbidden import of sentence_transformers.")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module == "sentence_transformers":
+                        violations.append("AST Violates C3: Forbidden import of sentence_transformers.")
+                
+                # Check for string literals (absolute paths, drop table queries)
+                elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    val = node.value
+                    if any(path in val for path in ["/home/", "/etc/", "/usr/local/bin/"]):
+                        violations.append(f"AST Violates C6: Found absolute filesystem path in string literal: '{val}'")
+                    if any(sql in val.upper() for sql in ["DROP TABLE", "TRUNCATE TABLE", "DROP DATABASE"]):
+                        violations.append(f"AST Violates C1: Found destructive database query in string literal: '{val}'")
+        except SyntaxError as e:
+            violations.append(f"AST Syntax Error: {e.msg} at line {e.lineno}")
+        except Exception as e:
+            violations.append(f"AST Parsing Error: {str(e)}")
+        return violations
+

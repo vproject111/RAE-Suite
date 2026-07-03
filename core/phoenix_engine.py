@@ -37,7 +37,7 @@ class PhoenixEngine:
             logger.info("phoenix_attempt", attempt=attempt, max=self.max_attempts)
             
             # --- Simulation of Patch Generation ---
-            patch_content = f"// Phoenix Patch v{attempt} for {target_file}\n"
+            patch_content = f"# Phoenix Patch v{attempt} for {target_file}\n"
             patch_hash = hashlib.sha256(patch_content.encode()).hexdigest()
             
             # 2. EMIT PATCH_GENERATED
