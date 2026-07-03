@@ -39,6 +39,45 @@ class AutonomyKernel:
         self.trust_evaluator = ContextTrustEvaluator()
         self.cognitive_planner = CognitivePlanner()
         self.active_policy_hash = "p-default-v6.8"
+        self.capability_contracts = {
+            "rae-phoenix": CapabilityContract(
+                contract_id="cap-phoenix",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2, RiskClass.R3],
+                allowed_tools=["git", "diff", "patch", "linter"],
+                denied_tools=["docker", "ssh", "drop", "truncate"],
+                secret_access_allowlist=[],
+                max_token_budget=100000,
+                max_execution_time_seconds=600
+            ),
+            "rae-hive": CapabilityContract(
+                contract_id="cap-hive",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2],
+                allowed_tools=["git", "shell", "run_test"],
+                denied_tools=["deploy", "ssh", "drop"],
+                secret_access_allowlist=[],
+                max_token_budget=50000,
+                max_execution_time_seconds=300
+            ),
+            "rae-quality": CapabilityContract(
+                contract_id="cap-quality",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1],
+                allowed_tools=["pytest", "ruff", "mypy", "ast"],
+                denied_tools=["git", "shell", "write"],
+                secret_access_allowlist=[],
+                max_token_budget=50000,
+                max_execution_time_seconds=300
+            ),
+            "rae-openclaw": CapabilityContract(
+                contract_id="cap-openclaw",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2, RiskClass.R3, RiskClass.R4, RiskClass.R5],
+                allowed_tools=["ssh", "docker", "git", "shell"],
+                denied_tools=["drop"],
+                secret_access_allowlist=["prod_keys"],
+                max_token_budget=500000,
+                max_execution_time_seconds=1200
+            )
+        }
+
 
     async def execute_task(self, goal_id: str, task_id: str, intent: str, payload: Dict[str, Any]) -> ExecutionReceipt:
         trace_id = f"trace-{uuid.uuid4()}"
@@ -73,12 +112,7 @@ class AutonomyKernel:
         transition(TaskState.CLASSIFIED, f"Assessed as {risk_assessment.risk_class}")
 
         # 3. POLICY_CHECKED
-        # (Simplified logic for now)
-        policy_decision = DecisionType.ALLOW
-        if risk_assessment.risk_class == RiskClass.R6:
-            policy_decision = DecisionType.QUARANTINE
-        elif risk_assessment.risk_class in [RiskClass.R4, RiskClass.R5]:
-            policy_decision = DecisionType.NEEDS_APPROVAL
+        policy_decision = self.policy_checker.evaluate_policy(risk_assessment)
         
         transition(TaskState.POLICY_CHECKED, f"Policy decision: {policy_decision}")
 
@@ -97,8 +131,29 @@ class AutonomyKernel:
             )
 
         # 4. CAPABILITY_CHECKED
-        # (Mock check)
-        transition(TaskState.CAPABILITY_CHECKED, "Agent capabilities verified.")
+        agent_id = payload.get("target_agent", "rae-hive")
+        contract = self.capability_contracts.get(agent_id)
+        if not contract:
+            contract = CapabilityContract(
+                contract_id="cap-default",
+                allowed_risk_classes=[RiskClass.R0, RiskClass.R1, RiskClass.R2],
+                allowed_tools=["shell"],
+                denied_tools=[],
+                secret_access_allowlist=[],
+                max_token_budget=50000,
+                max_execution_time_seconds=300
+            )
+
+        if risk_assessment.risk_class not in contract.allowed_risk_classes:
+            transition(TaskState.REJECTED, f"Agent {agent_id} lacks capability for risk class {risk_assessment.risk_class}")
+            return self._finalize_receipt(
+                goal_id, task_id, trace_id, risk_assessment.risk_class, 
+                policy_decision, ExecutionStatus.REJECTED, TaskState.REJECTED, 
+                transitions, started_at
+            )
+            
+        transition(TaskState.CAPABILITY_CHECKED, f"Agent {agent_id} capabilities verified against {contract.contract_id}.")
+
 
         # 5. PLANNED
         cognitive_plan = None
@@ -127,16 +182,154 @@ class AutonomyKernel:
         
         # --- Enforce Sandbox Isolation for Risk > R1 ---
         if risk_assessment.risk_class > RiskClass.R1:
-            sandbox_path = self.sandbox_manager.create_worktree(task_id)
-            logger.info("sandbox_allocated", path=sandbox_path)
+            try:
+                sandbox_path = self.sandbox_manager.create_worktree(task_id)
+                logger.info("sandbox_allocated", path=sandbox_path)
+            except Exception as e:
+                logger.critical(f"sandbox_allocation_failed: {e}")
+                transition(TaskState.FAILED_ESCALATED, f"Sandbox allocation failed: {e}")
+                return self._finalize_receipt(
+                    goal_id, task_id, trace_id, risk_assessment.risk_class, 
+                    policy_decision, ExecutionStatus.FAILED_ESCALATED, TaskState.FAILED_ESCALATED, 
+                    transitions, started_at
+                )
+
 
         # --- Execution Logic ---
         execution_status = ExecutionStatus.SUCCESS
-        
-        # Phoenix Self-Repair Trigger
-        if "fix" in intent.lower() or "repair" in intent.lower():
+        agent = payload.get("target_agent", "")
+
+        # 1. OpenClaw Escalation for high risk or explicit target
+        if agent == "rae-openclaw" or risk_assessment.risk_class >= RiskClass.R3:
+            import subprocess
+            import os
+            logger.info("escalating_to_openclaw", trace_id=trace_id, task_id=task_id)
+            self.bridge.save_event("Escalating task to OpenClaw (Hard Frames 2.1 sandbox).", layer="episodic")
+            
+            try:
+                # Resolve OpenClaw CLI entry point
+                claw_path = "packages/rae-open-claw/dist/index.js"
+                if not os.path.exists(claw_path):
+                    claw_path = "RAE-Suite/packages/rae-open-claw/dist/index.js"
+                
+                local_cmd = ["node", claw_path, "agent", "--message", intent]
+                
+                # --- Dynamic Compute Offloading Check with Local Fallback ---
+                exec_host = os.getenv("EXECUTION_HOST", "local")
+                if exec_host != "local":
+                    ssh_user = os.getenv("EXECUTION_SSH_USER", "operator")
+                    remote_workspace = os.getenv("EXECUTION_REMOTE_WORKSPACE", "~/rae-node-agent")
+                    ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", f"{ssh_user}@{exec_host}"]
+                    remote_cmd_str = f"cd {remote_workspace} && " + " ".join(local_cmd)
+                    remote_cmd = ssh_cmd + [remote_cmd_str]
+                    logger.info("offloading_compute_to_cluster", host=exec_host, cmd=remote_cmd)
+                    self.bridge.save_event(f"Offloading computation task to cluster node: {exec_host}.", layer="episodic")
+                    
+                    try:
+                        proc = subprocess.run(remote_cmd, capture_output=True, text=True, timeout=300)
+                        if proc.returncode == 0:
+                            logger.info("openclaw_execution_success", output=proc.stdout)
+                            self.bridge.save_event("OpenClaw task execution succeeded on remote host.", layer="episodic")
+                            execution_status = ExecutionStatus.SUCCESS
+                        else:
+                            logger.warning(f"openclaw_remote_execution_failed_falling_back_locally: {proc.stderr}")
+                            self.bridge.save_event(f"Remote OpenClaw execution failed: {proc.stderr}. Falling back to local execution.", layer="episodic")
+                            # Fallback locally
+                            proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
+                            if proc.returncode == 0:
+                                logger.info("openclaw_local_fallback_success", output=proc.stdout)
+                                self.bridge.save_event("OpenClaw task execution succeeded locally after remote failure.", layer="episodic")
+                                execution_status = ExecutionStatus.SUCCESS
+                            else:
+                                logger.error(f"openclaw_local_fallback_failed: {proc.stderr}")
+                                self.bridge.save_event(f"Local OpenClaw fallback execution failed: {proc.stderr}", layer="episodic")
+                                execution_status = ExecutionStatus.FAILED
+                    except (subprocess.TimeoutExpired, Exception) as remote_err:
+                        logger.warning(f"openclaw_remote_execution_error_falling_back_locally: {remote_err}")
+                        self.bridge.save_event(f"Remote OpenClaw execution error: {remote_err}. Falling back to local execution.", layer="episodic")
+                        # Fallback locally
+                        try:
+                            proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
+                            if proc.returncode == 0:
+                                logger.info("openclaw_local_fallback_success", output=proc.stdout)
+                                self.bridge.save_event("OpenClaw task execution succeeded locally after remote exception.", layer="episodic")
+                                execution_status = ExecutionStatus.SUCCESS
+                            else:
+                                logger.error(f"openclaw_local_fallback_failed: {proc.stderr}")
+                                self.bridge.save_event(f"Local OpenClaw fallback execution failed: {proc.stderr}", layer="episodic")
+                                execution_status = ExecutionStatus.FAILED
+                        except Exception as local_err:
+                            logger.error(f"openclaw_local_execution_error: {local_err}")
+                            self.bridge.save_event(f"Local OpenClaw execution error: {local_err}", layer="episodic")
+                            execution_status = ExecutionStatus.FAILED
+                else:
+                    # Run locally from start
+                    proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
+                    if proc.returncode == 0:
+                        logger.info("openclaw_execution_success", output=proc.stdout)
+                        self.bridge.save_event("OpenClaw task execution succeeded.", layer="episodic")
+                        execution_status = ExecutionStatus.SUCCESS
+                    else:
+                        logger.error(f"openclaw_execution_failed: {proc.stderr}")
+                        self.bridge.save_event(f"OpenClaw execution failed: {proc.stderr}", layer="episodic")
+                        execution_status = ExecutionStatus.FAILED
+            except Exception as e:
+                logger.error(f"openclaw_escalation_error: {e}")
+                self.bridge.save_event(f"OpenClaw escalation error: {e}", layer="episodic")
+                execution_status = ExecutionStatus.FAILED
+
+        # 2. Phoenix Self-Repair Trigger
+        elif "fix" in intent.lower() or "repair" in intent.lower():
             res = await self.phoenix.run_repair_loop(trace_id, "Error: regression detected", payload.get("target_file", "main.py"))
             execution_status = ExecutionStatus.SUCCESS if res["status"] == "SUCCESS" else ExecutionStatus.FAILED
+
+        # 3. Default Execution (standard fallback success)
+        else:
+            execution_status = ExecutionStatus.SUCCESS
+
+        # Hermes Escalation upon failure/deadlock
+        if execution_status == ExecutionStatus.FAILED:
+            import httpx
+            import os
+            logger.warning("execution_deadlock_detected_invoking_hermes", trace_id=trace_id)
+            self.bridge.save_event("Structural deadlock or failure detected. Invoking Hermes for architectural planning.", layer="episodic")
+            
+            try:
+                hermes_url = os.getenv("HERMES_API_URL", "http://localhost:8022")
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(f"{hermes_url}/v1/plan", json={
+                        "project": payload.get("project", "default"),
+                        "trace_id": trace_id,
+                        "error": f"Task execution failed for intent: {intent}",
+                        "context": {
+                            "intent": intent,
+                            "target_file": payload.get("target_file", "main.py")
+                        }
+                    }, timeout=10.0)
+                    
+                    if resp.status_code == 200:
+                        roadmap = resp.json().get("roadmap", {})
+                        logger.info("hermes_roadmap_generated", roadmap=roadmap)
+                        self.bridge.save_event("Hermes successfully generated architectural refactoring roadmap.", layer="episodic")
+                        payload["hermes_roadmap"] = roadmap
+                    else:
+                        logger.warning("hermes_api_failed", status=resp.status_code)
+                        payload["hermes_roadmap"] = {
+                            "steps": [
+                                "1. Break circular dependencies by extracting common types.",
+                                "2. Align module imports to use strict relative path formats."
+                            ]
+                        }
+                        self.bridge.save_event("Hermes API unavailable. Loaded fallback roadmap from local heuristics.", layer="episodic")
+            except Exception as e:
+                logger.error("hermes_invocation_error", error=str(e))
+                payload["hermes_roadmap"] = {
+                    "steps": [
+                        "1. Break circular dependencies by extracting common types.",
+                        "2. Align module imports to use strict relative path formats."
+                    ]
+                }
+                self.bridge.save_event(f"Hermes invocation failed: {e}. Fallback roadmap loaded.", layer="episodic")
         
         # If R3, interact with GitOps
         if risk_assessment.risk_class == RiskClass.R3 and execution_status == ExecutionStatus.SUCCESS:

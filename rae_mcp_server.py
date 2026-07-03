@@ -23,6 +23,9 @@ if RAE_CORE_PATH and RAE_CORE_PATH not in sys.path:
 
 from rae_core.utils.enterprise_guard import RAE_Enterprise_Foundation, audited_operation
 
+from core.autonomy_kernel import AutonomyKernel
+from rae_contracts import ExecutionStatus
+
 class RAESupervisor:
     def __init__(self):
         # Intelligent project/tenant detection is encapsulated in Foundation/Bridge
@@ -30,9 +33,21 @@ class RAESupervisor:
         self.bridge = self.enterprise_foundation.bridge
         self.api_url = self.bridge.api_url
         self.tenant_id = self.bridge.tenant_id
+        # Instantiate Autonomy Kernel for security and capability gating
+        self.kernel = AutonomyKernel(bridge=self.bridge, repo_root=".")
 
     @audited_operation("get_cloud_status")
     async def get_cloud_status(self):
+        # Route through AutonomyKernel first
+        receipt = await self.kernel.execute_task(
+            goal_id="mcp-cloud-status-goal",
+            task_id="mcp-status-task",
+            intent="Fetch Docker container statuses via docker ps.",
+            payload={"target_agent": "rae-hive", "command": "docker ps"}
+        )
+        if receipt.execution_status != ExecutionStatus.SUCCESS:
+            return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
+
         result = subprocess.check_output(
             ["docker", "ps", "--format", "json"], 
             stderr=subprocess.STDOUT
@@ -42,6 +57,17 @@ class RAESupervisor:
 
     @audited_operation("run_diagnostic")
     async def run_diagnostic(self, script_name: str):
+        # Route through AutonomyKernel first
+        intent = f"Execute diagnostic script {script_name}"
+        receipt = await self.kernel.execute_task(
+            goal_id="mcp-diagnostic-goal",
+            task_id="mcp-diag-task",
+            intent=intent,
+            payload={"target_agent": "rae-quality", "script": script_name}
+        )
+        if receipt.execution_status != ExecutionStatus.SUCCESS:
+            return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
+
         script_path = os.path.join("scripts", script_name)
         if not os.path.exists(script_path):
             return f"Error: Script {script_name} not found."
@@ -54,6 +80,17 @@ class RAESupervisor:
 
     @audited_operation("search_rae_memory")
     async def search_rae_memory(self, query: str, project: str = None, layer: str = None, limit: int = 5):
+        # Route through AutonomyKernel first
+        intent = f"Search RAE memory query: {query}"
+        receipt = await self.kernel.execute_task(
+            goal_id="mcp-search-memory-goal",
+            task_id="mcp-search-task",
+            intent=intent,
+            payload={"target_agent": "rae-hive", "query": query, "project": project, "layer": layer}
+        )
+        if receipt.execution_status != ExecutionStatus.SUCCESS:
+            return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
+
         # We don't default project/layer here to allow RAE Engine to use its own context-aware defaults
         payload = {
             "query": query,
@@ -73,6 +110,17 @@ class RAESupervisor:
 
     @audited_operation("create_rae_memory")
     async def create_rae_memory(self, content: str, human_label: str = None, project: str = None, layer: str = None, importance: float = 0.5, metadata: dict = {}, info_class: str = "internal"):
+        # Route through AutonomyKernel first
+        intent = f"Create RAE memory: {content[:30]}..."
+        receipt = await self.kernel.execute_task(
+            goal_id="mcp-create-memory-goal",
+            task_id="mcp-create-task",
+            intent=intent,
+            payload={"target_agent": "rae-hive", "content": content, "info_class": info_class}
+        )
+        if receipt.execution_status != ExecutionStatus.SUCCESS:
+            return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
+
         # We allow layer to be None so RAE Core can decide placement based on info_class/content
         payload = {
             "content": content,
@@ -97,6 +145,17 @@ class RAESupervisor:
 
     @audited_operation("get_service_logs")
     async def get_service_logs(self, service: str, lines: int = 50):
+        # Route through AutonomyKernel first
+        intent = f"Retrieve recent logs for service container: {service}"
+        receipt = await self.kernel.execute_task(
+            goal_id="mcp-logs-goal",
+            task_id="mcp-logs-task",
+            intent=intent,
+            payload={"target_agent": "rae-hive", "service": service, "lines": lines}
+        )
+        if receipt.execution_status != ExecutionStatus.SUCCESS:
+            return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
+
         result = subprocess.check_output(
             ["docker", "logs", "--tail", str(lines), service], 
             stderr=subprocess.STDOUT
@@ -191,19 +250,57 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.C
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="rae-cloud-supervisor",
-                server_version="2.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
+    if os.environ.get("RAE_MCP_SSE") == "1":
+        import uvicorn
+        from fastapi import FastAPI, Request
+        from mcp.server.sse import SseServerTransport
+
+        app = FastAPI(title="rae-cloud-supervisor")
+        sse = SseServerTransport("/mcp/messages")
+
+        @app.get("/mcp/sse")
+        async def mcp_sse_endpoint(request: Request):
+            async with sse.connect_sse(request.scope, request.receive, request._send) as (read_stream, write_stream):
+                await server.run(
+                    read_stream,
+                    write_stream,
+                    InitializationOptions(
+                        server_name="rae-cloud-supervisor",
+                        server_version="2.1.0",
+                        capabilities=server.get_capabilities(
+                            notification_options=NotificationOptions(),
+                            experimental_capabilities={},
+                        ),
+                    ),
+                )
+
+        @app.post("/mcp/messages")
+        async def mcp_messages_endpoint(request: Request):
+            await sse.handle_post_message(request.scope, request.receive, request._send)
+
+        @app.get("/health")
+        def health():
+            return {"status": "healthy"}
+
+        port = int(os.environ.get("RAE_MCP_PORT", "8005"))
+        print(f"Starting SSE MCP Server on port {port}")
+        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+        server_uvicorn = uvicorn.Server(config)
+        await server_uvicorn.serve()
+    else:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="rae-cloud-supervisor",
+                    server_version="2.1.0",
+                    capabilities=server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
                 ),
-            ),
-        )
+            )
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -48,6 +48,7 @@ class RAE_CEO_Orchestrator:
         # Autonomy Kernel (Silicon Oracle v6.8)
         self.kernel = AutonomyKernel(bridge=self.bridge, repo_root=".")
         self.curiosity_engine = CuriosityEngine(kernel=self.kernel, repo_root=".")
+        self.planning_agent = os.getenv("CEO_PLANNING_AGENT", "rae-oracle-gemini")
 
     async def run_loop(self):
         logger.info("orchestrator_booted", role="CEO_Agent", mode="Declarative Reconciler")
@@ -170,7 +171,7 @@ class RAE_CEO_Orchestrator:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(f"{self.api_url}/v2/bridge/interact", json={
                     "intent": "CEO_STRATEGIC_PLANNING",
-                    "target_agent": "rae-oracle-gemini",
+                    "target_agent": self.planning_agent,
                     "payload": {"prompt": prompt}
                 }, timeout=10.0)
                 if resp.status_code == 200:

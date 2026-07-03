@@ -52,6 +52,8 @@ services:
       - QDRANT_HOST=rae-am-qdrant
       - PYTHONPATH=/app
       - ML_SERVICE_URL=
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     depends_on:
       - rae-am-postgres
       - rae-am-redis
@@ -151,6 +153,7 @@ services:
       context: ./packages/rae-open-claw
       dockerfile: ../../infra/openclaw/Dockerfile.rae
     restart: always
+    user: "node"
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -164,11 +167,35 @@ services:
       - RAE_TENANT_ID=53717286-fe94-4c8f-baf9-c4d2758eb672
       - RAE_PROJECT_NAME=dreamsoft_factory
       - NODE_ENV=production
+      - HOME=/home/node
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     volumes:
       # Hard Frames: Code remains internal to the image
       - ./.openclaw_config:/home/node/.openclaw:rw
       - /tmp:/tmp:rw
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
+    networks:
+      - rae-internal
+
+  rae-supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8005:8005"
+    command: python rae_mcp_server.py
+    environment:
+      - RAE_API_URL=http://rae-memory:8000
+      - RAE_MCP_SSE=1
+      - RAE_MCP_PORT=8005
+      - PYTHONPATH=/app
+    volumes:
+      - ./packages/rae-core/rae_core:/app/rae_core
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - rae-memory
     networks:
       - rae-internal
 

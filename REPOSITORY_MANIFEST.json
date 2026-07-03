@@ -1,0 +1,51 @@
+{
+  "project": "RAE-Suite",
+  "host_commit_sha": "45b176bdeddda233d6dfc1eacb848aa41df14ff9",
+  "host_branch": "feature/aea-0-repository-manifest",
+  "contracts_version": "7.0",
+  "submodules": {
+    "rae-agentic-memory": {
+      "path": "packages/rae-agentic-memory",
+      "commit_sha": "473f9bd60f130e3eefe7e44a4f20e00e0e1ab27d"
+    },
+    "rae-hive": {
+      "path": "packages/rae-hive",
+      "commit_sha": "d4d5088fea836cd6b8df96e77e9f977bb5837d82"
+    },
+    "rae-lab": {
+      "path": "packages/rae-lab",
+      "commit_sha": "5c727f3d9e538db526361cc8466390e81fea61c2"
+    },
+    "rae-open-claw": {
+      "path": "packages/rae-open-claw",
+      "commit_sha": "b9921e21b93d3f1298c65a2e771b02bce2f7c637"
+    },
+    "rae-phoenix": {
+      "path": "packages/rae-phoenix",
+      "commit_sha": "1703f5632ec821863dcbb43b4973e51a2b8105d2"
+    },
+    "rae-quality": {
+      "path": "packages/rae-quality",
+      "commit_sha": "ca514b2bb6442bd9c00d9d030f32dbffd3648334"
+    }
+  },
+  "supported_capabilities": [
+    "phoenix.plan_change",
+    "phoenix.generate_patch",
+    "hive.prepare_worktree",
+    "hive.execute_tool",
+    "quality.evaluate_patch",
+    "quality.run_linter",
+    "lab.mine_failures",
+    "lab.recommender"
+  ],
+  "health_endpoints": {
+    "rae-api": "http://localhost:8011/health",
+    "rae-suite": "http://localhost:8009/health",
+    "rae-phoenix": "http://localhost:8012/health",
+    "rae-quality": "http://localhost:8010/health",
+    "rae-hive": "http://localhost:8013/health"
+  },
+  "migration_status": "aligned",
+  "generated_at": "2026-07-03T12:58:13Z"
+}
