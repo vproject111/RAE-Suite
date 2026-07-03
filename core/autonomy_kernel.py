@@ -461,10 +461,25 @@ class AutonomyKernel:
         elapsed_seconds = (finished_at - started_at).total_seconds()
         
         # Construct OutcomeRecord (OTEL context propagation + telemetry)
+        otel_span_id = f"spn-{uuid.uuid4().hex[:8]}"
+        otel_parent_span_id = None
+        try:
+            from opentelemetry import trace
+            current_span = trace.get_current_span()
+            if current_span and current_span.get_span_context().is_valid:
+                otel_span_id = f"{current_span.get_span_context().span_id:016x}"
+                # Parent context can be resolved from active trace span
+                parent_context = current_span.parent
+                if parent_context and parent_context.is_valid:
+                    otel_parent_span_id = f"{parent_context.span_id:016x}"
+        except Exception:
+            pass
+
         outcome_rec = OutcomeRecord(
             trace_id=trace_id,
-            span_id=f"spn-{uuid.uuid4().hex[:8]}",
-            parent_span_id=None,
+            span_id=otel_span_id,
+            parent_span_id=otel_parent_span_id,
+
             goal_id=goal_id,
             task_id=task_id,
             risk_class=risk_class,
