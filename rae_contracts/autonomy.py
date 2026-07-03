@@ -221,3 +221,21 @@ class ExecutionReceipt(BaseModel):
     tool_versions: Dict[str, str] = Field(default_factory=dict, description="E.g. {'pytest': '8.2.0'}")
     started_at: datetime
     finished_at: datetime
+
+class ContextEnvelope(BaseModel):
+    schema_version: str = "1.0"
+    context_id: str
+    source_type: str = Field("memory", description="Source indicator, e.g. 'memory', 'file', 'user'")
+    source_uri: str
+    source_hash: str
+    trust_score: float = Field(0.5, ge=0.0, le=1.0)
+    information_class: str = Field("internal", description="public, internal, confidential, restricted")
+    tenant_id: str
+    project_id: str
+    memory_layer: str = Field("working", description="sensory, episodic, working, semantic, long_term, reflective")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    valid_until: datetime
+    token_cost: int = 0
+    retrieved_content: str
+    allowed_uses: List[str] = Field(default_factory=list)
+
