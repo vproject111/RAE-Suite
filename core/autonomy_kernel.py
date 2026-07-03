@@ -9,7 +9,7 @@ from rae_contracts import (
     ExecutionStatus, QualityStatus, MemoryWritebackStatus,
     ExecutionMode, ExecutionReceipt, StateTransition,
     DecisionLedgerEntry, PolicyBundle, CapabilityContract,
-    HandoffEnvelope
+    HandoffEnvelope, OutcomeRecord
 )
 from core.policy_checker import RiskClassifier, PolicyChecker
 from core.gitops_daemon import GitOpsDaemon
@@ -436,7 +436,31 @@ class AutonomyKernel:
     ) -> ExecutionReceipt:
         
         finished_at = datetime.now(timezone.utc)
+        elapsed_seconds = (finished_at - started_at).total_seconds()
         
+        # Construct OutcomeRecord (OTEL context propagation + telemetry)
+        outcome_rec = OutcomeRecord(
+            trace_id=trace_id,
+            span_id=f"spn-{uuid.uuid4().hex[:8]}",
+            parent_span_id=None,
+            goal_id=goal_id,
+            task_id=task_id,
+            risk_class=risk_class,
+            execution_status=execution_status,
+            execution_time_seconds=elapsed_seconds,
+            token_cost=1500,
+            outcome_metrics={
+                "quality_status": str(quality_status),
+                "final_state": str(final_state),
+                "transitions_count": len(transitions)
+            }
+        )
+        # Log outcome record to reflective memory layer
+        self.bridge.save_event(
+            f"OTEL Outcome Record: {outcome_rec.model_dump_json() if hasattr(outcome_rec, 'model_dump_json') else outcome_rec.json()}",
+            layer="reflective"
+        )
+
         receipt = ExecutionReceipt(
             receipt_id=f"rec-{uuid.uuid4()}",
             goal_id=goal_id,

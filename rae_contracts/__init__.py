@@ -45,6 +45,7 @@ from rae_contracts.autonomy import (
     WorkflowStep,
     WorkflowDefinition,
     HandoffEnvelope,
+    OutcomeRecord,
 )
 
 __all__ = [
@@ -88,4 +89,5 @@ __all__ = [
     "WorkflowStep",
     "WorkflowDefinition",
     "HandoffEnvelope",
+    "OutcomeRecord",
 ]
