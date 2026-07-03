@@ -104,8 +104,13 @@ class AutonomyKernel:
         if "historical_context" in payload:
             raw_context = payload["historical_context"]
             filtered_context = self.trust_evaluator.filter_context(raw_context)
-            payload["historical_context"] = filtered_context
+            # Serialize to dict to prevent JSON formatting errors
+            payload["historical_context"] = [
+                json.loads(c.model_dump_json()) if hasattr(c, "model_dump_json") else json.loads(c.json())
+                for c in filtered_context
+            ]
             logger.info("context_trust_evaluated", original=len(raw_context), filtered=len(filtered_context))
+
 
         # 2. CLASSIFIED
         risk_assessment = self.risk_classifier.assess_risk(trace_id, intent, payload)

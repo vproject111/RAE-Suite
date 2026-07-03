@@ -41,6 +41,7 @@ from rae_contracts.autonomy import (
     RollbackPlan,
     StateTransition,
     ExecutionReceipt,
+    ContextEnvelope,
 )
 
 __all__ = [
@@ -80,4 +81,5 @@ __all__ = [
     "RollbackPlan",
     "StateTransition",
     "ExecutionReceipt",
+    "ContextEnvelope",
 ]
