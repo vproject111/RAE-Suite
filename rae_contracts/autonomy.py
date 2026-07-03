@@ -271,4 +271,19 @@ class HandoffEnvelope(BaseModel):
     information_class: str = "internal"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class OutcomeRecord(BaseModel):
+    schema_version: str = "1.0"
+    trace_id: str
+    span_id: str
+    parent_span_id: Optional[str] = None
+    goal_id: str
+    task_id: str
+    risk_class: RiskClass
+    execution_status: ExecutionStatus
+    execution_time_seconds: float
+    token_cost: int = 0
+    outcome_metrics: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 
