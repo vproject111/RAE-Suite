@@ -182,8 +182,18 @@ class AutonomyKernel:
         
         # --- Enforce Sandbox Isolation for Risk > R1 ---
         if risk_assessment.risk_class > RiskClass.R1:
-            sandbox_path = self.sandbox_manager.create_worktree(task_id)
-            logger.info("sandbox_allocated", path=sandbox_path)
+            try:
+                sandbox_path = self.sandbox_manager.create_worktree(task_id)
+                logger.info("sandbox_allocated", path=sandbox_path)
+            except Exception as e:
+                logger.critical(f"sandbox_allocation_failed: {e}")
+                transition(TaskState.FAILED_ESCALATED, f"Sandbox allocation failed: {e}")
+                return self._finalize_receipt(
+                    goal_id, task_id, trace_id, risk_assessment.risk_class, 
+                    policy_decision, ExecutionStatus.FAILED_ESCALATED, TaskState.FAILED_ESCALATED, 
+                    transitions, started_at
+                )
+
 
         # --- Execution Logic ---
         execution_status = ExecutionStatus.SUCCESS
