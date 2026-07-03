@@ -9,7 +9,7 @@ from rae_contracts import (
     ExecutionStatus, QualityStatus, MemoryWritebackStatus,
     ExecutionMode, ExecutionReceipt, StateTransition,
     DecisionLedgerEntry, PolicyBundle, CapabilityContract,
-    HandoffEnvelope, OutcomeRecord
+    HandoffEnvelope, OutcomeRecord, VoteType
 )
 from core.policy_checker import RiskClassifier, PolicyChecker
 from core.gitops_daemon import GitOpsDaemon
@@ -20,6 +20,7 @@ from core.quality_sentinel import QualitySentinel
 from core.guardrail_manager import GuardrailManager
 from core.context_trust_evaluator import ContextTrustEvaluator
 from core.cognitive_planner import CognitivePlanner
+from core.swarm_consensus import SwarmConsensusEngine
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class AutonomyKernel:
         self.guardrail_manager = GuardrailManager(bridge)
         self.trust_evaluator = ContextTrustEvaluator()
         self.cognitive_planner = CognitivePlanner()
+        self.swarm_consensus = SwarmConsensusEngine()
         self.active_policy_hash = "p-default-v6.8"
         self.capability_contracts = {
             "rae-phoenix": CapabilityContract(
@@ -96,7 +98,7 @@ class AutonomyKernel:
                 actor="autonomy-kernel"
             )
             transitions.append(st)
-            logger.info("task_state_transition", trace_id=trace_id, from_state=from_state, to_state=to_state)
+            logger.info(f"task_state_transition: trace_id={trace_id}, from_state={from_state}, to_state={to_state}")
 
         # 1. RECEIVED
         transition(TaskState.RECEIVED, "Task initialized by Orchestrator.")
@@ -110,7 +112,7 @@ class AutonomyKernel:
                 json.loads(c.model_dump_json()) if hasattr(c, "model_dump_json") else json.loads(c.json())
                 for c in filtered_context
             ]
-            logger.info("context_trust_evaluated", original=len(raw_context), filtered=len(filtered_context))
+            logger.info(f"context_trust_evaluated: original={len(raw_context)}, filtered={len(filtered_context)}")
 
 
         # 2. CLASSIFIED
@@ -121,6 +123,26 @@ class AutonomyKernel:
         policy_decision = self.policy_checker.evaluate_policy(risk_assessment)
         
         transition(TaskState.POLICY_CHECKED, f"Policy decision: {policy_decision}")
+
+        # --- Enforce Swarm Consensus for High-Risk (R4/R5) Operations ---
+        if risk_assessment.risk_class in [RiskClass.R4, RiskClass.R5]:
+            proposal = await self.swarm_consensus.evaluate_consensus(task_id, risk_assessment.risk_class, intent, payload)
+            # Log proposal to reflective memory layer
+            self.bridge.save_event(f"Swarm Consensus Proposal: {proposal.proposal_id} - Decision: {proposal.final_decision}", layer="reflective")
+            
+            # Serialize proposal votes to dict and put in payload for evidence
+            payload["swarm_consensus_proposal"] = json.loads(proposal.model_dump_json()) if hasattr(proposal, "model_dump_json") else json.loads(proposal.json())
+            
+            if proposal.final_decision == VoteType.REJECT:
+                transition(TaskState.REJECTED, f"Rejected via Swarm Consensus. Quality Veto or weighted reject.")
+                return self._finalize_receipt(
+                    goal_id, task_id, trace_id, risk_assessment.risk_class, 
+                    policy_decision, ExecutionStatus.REJECTED, TaskState.REJECTED, 
+                    transitions, started_at
+                )
+            else:
+                transition(TaskState.POLICY_CHECKED, f"Swarm Consensus APPROVED (Proposal: {proposal.proposal_id}).")
+                policy_decision = DecisionType.ALLOW
 
         if policy_decision == DecisionType.QUARANTINE:
             return self._finalize_receipt(
@@ -172,7 +194,7 @@ class AutonomyKernel:
                 payload["cognitive_plan_meta"] = json.loads(cognitive_plan.model_dump_json())
             else:
                 payload["cognitive_plan_meta"] = json.loads(cognitive_plan.json())
-            logger.info("mcts_plan_selected", selected_branch=cognitive_plan.selected_branch_id, win_prob=cognitive_plan.win_probability)
+            logger.info(f"mcts_plan_selected: selected_branch={cognitive_plan.selected_branch_id}, win_prob={cognitive_plan.win_probability}")
         else:
             transition(TaskState.PLANNED, "Execution plan generated.")
 
@@ -190,7 +212,7 @@ class AutonomyKernel:
         if risk_assessment.risk_class > RiskClass.R1:
             try:
                 sandbox_path = self.sandbox_manager.create_worktree(task_id)
-                logger.info("sandbox_allocated", path=sandbox_path)
+                logger.info(f"sandbox_allocated: path={sandbox_path}")
             except Exception as e:
                 logger.critical(f"sandbox_allocation_failed: {e}")
                 transition(TaskState.FAILED_ESCALATED, f"Sandbox allocation failed: {e}")
@@ -209,7 +231,7 @@ class AutonomyKernel:
         if agent == "rae-openclaw" or risk_assessment.risk_class >= RiskClass.R3:
             import subprocess
             import os
-            logger.info("escalating_to_openclaw", trace_id=trace_id, task_id=task_id)
+            logger.info(f"escalating_to_openclaw: trace_id={trace_id}, task_id={task_id}")
             self.bridge.save_event("Escalating task to OpenClaw (Hard Frames 2.1 sandbox).", layer="episodic")
             
             try:
@@ -228,13 +250,13 @@ class AutonomyKernel:
                     ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", f"{ssh_user}@{exec_host}"]
                     remote_cmd_str = f"cd {remote_workspace} && " + " ".join(local_cmd)
                     remote_cmd = ssh_cmd + [remote_cmd_str]
-                    logger.info("offloading_compute_to_cluster", host=exec_host, cmd=remote_cmd)
+                    logger.info(f"offloading_compute_to_cluster: host={exec_host}, cmd={remote_cmd}")
                     self.bridge.save_event(f"Offloading computation task to cluster node: {exec_host}.", layer="episodic")
                     
                     try:
                         proc = subprocess.run(remote_cmd, capture_output=True, text=True, timeout=300)
                         if proc.returncode == 0:
-                            logger.info("openclaw_execution_success", output=proc.stdout)
+                            logger.info(f"openclaw_execution_success: output={proc.stdout}")
                             self.bridge.save_event("OpenClaw task execution succeeded on remote host.", layer="episodic")
                             execution_status = ExecutionStatus.SUCCESS
                         else:
@@ -243,7 +265,7 @@ class AutonomyKernel:
                             # Fallback locally
                             proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
                             if proc.returncode == 0:
-                                logger.info("openclaw_local_fallback_success", output=proc.stdout)
+                                logger.info(f"openclaw_local_fallback_success: output={proc.stdout}")
                                 self.bridge.save_event("OpenClaw task execution succeeded locally after remote failure.", layer="episodic")
                                 execution_status = ExecutionStatus.SUCCESS
                             else:
@@ -257,7 +279,7 @@ class AutonomyKernel:
                         try:
                             proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
                             if proc.returncode == 0:
-                                logger.info("openclaw_local_fallback_success", output=proc.stdout)
+                                logger.info(f"openclaw_local_fallback_success: output={proc.stdout}")
                                 self.bridge.save_event("OpenClaw task execution succeeded locally after remote exception.", layer="episodic")
                                 execution_status = ExecutionStatus.SUCCESS
                             else:
@@ -272,7 +294,7 @@ class AutonomyKernel:
                     # Run locally from start
                     proc = subprocess.run(local_cmd, capture_output=True, text=True, timeout=300)
                     if proc.returncode == 0:
-                        logger.info("openclaw_execution_success", output=proc.stdout)
+                        logger.info(f"openclaw_execution_success: output={proc.stdout}")
                         self.bridge.save_event("OpenClaw task execution succeeded.", layer="episodic")
                         execution_status = ExecutionStatus.SUCCESS
                     else:
@@ -299,7 +321,7 @@ class AutonomyKernel:
         if execution_status == ExecutionStatus.FAILED:
             import httpx
             import os
-            logger.warning("execution_deadlock_detected_invoking_hermes", trace_id=trace_id)
+            logger.warning(f"execution_deadlock_detected_invoking_hermes: trace_id={trace_id}")
             self.bridge.save_event("Structural deadlock or failure detected. Invoking Hermes for architectural planning.", layer="episodic")
             
             try:
@@ -317,11 +339,11 @@ class AutonomyKernel:
                     
                     if resp.status_code == 200:
                         roadmap = resp.json().get("roadmap", {})
-                        logger.info("hermes_roadmap_generated", roadmap=roadmap)
+                        logger.info(f"hermes_roadmap_generated: roadmap={roadmap}")
                         self.bridge.save_event("Hermes successfully generated architectural refactoring roadmap.", layer="episodic")
                         payload["hermes_roadmap"] = roadmap
                     else:
-                        logger.warning("hermes_api_failed", status=resp.status_code)
+                        logger.warning(f"hermes_api_failed: status={resp.status_code}")
                         payload["hermes_roadmap"] = {
                             "steps": [
                                 "1. Break circular dependencies by extracting common types.",
@@ -330,7 +352,7 @@ class AutonomyKernel:
                         }
                         self.bridge.save_event("Hermes API unavailable. Loaded fallback roadmap from local heuristics.", layer="episodic")
             except Exception as e:
-                logger.error("hermes_invocation_error", error=str(e))
+                logger.error(f"hermes_invocation_error: error={str(e)}")
                 payload["hermes_roadmap"] = {
                     "steps": [
                         "1. Break circular dependencies by extracting common types.",
@@ -342,7 +364,7 @@ class AutonomyKernel:
         # If R3, interact with GitOps
         if risk_assessment.risk_class == RiskClass.R3 and execution_status == ExecutionStatus.SUCCESS:
             branch = self.gitops.create_agent_branch(task_id)
-            logger.info("gitops_branch_created", branch=branch)
+            logger.info(f"gitops_branch_created: branch={branch}")
         
         # 8. VERIFYING
         transition(TaskState.VERIFYING, "Execution artifacts verified.")
@@ -519,6 +541,6 @@ class AutonomyKernel:
             timeout_seconds=300,
             information_class=payload.get("information_class", "internal")
         )
-        logger.info("handoff_envelope_created", handoff_id=handoff.handoff_id, target=target)
+        logger.info(f"handoff_envelope_created: handoff_id={handoff.handoff_id}, target={target}")
         return handoff
 

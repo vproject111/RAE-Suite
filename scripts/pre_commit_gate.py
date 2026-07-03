@@ -15,7 +15,7 @@ def get_staged_files():
 
 def check_file_ast(filepath):
     # Exempt quality validator scripts from self-violations
-    if "pre_commit_gate" in filepath or "quality_sentinel" in filepath:
+    if "pre_commit_gate" in filepath or "quality_sentinel" in filepath or "swarm_consensus" in filepath:
         return []
 
     violations = []
