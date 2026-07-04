@@ -47,6 +47,19 @@ def run_funnel(mode: str, input_data: str, risk: str = "medium"):
 
 
 def main():
+    # 0. Walidacja wersjonowania i branchy (Twardy kontrakt RAE)
+    try:
+        import os
+        sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "RAE-core", "src"))
+        from rae_core.governance.versioning import VersioningValidator
+        validator = VersioningValidator(
+            project_path=os.path.dirname(os.path.abspath(__file__)),
+            module_name="rae-suite"
+        )
+        validator.validate()
+    except Exception as e:
+        logger.warning(f"⚠️ Nie można uruchomić walidatora wersjonowania: {e}")
+
     parser = argparse.ArgumentParser(description="RAE-Suite Deterministic Agentic Factory")
     parser.add_argument("--mode", choices=["create", "refactor"], required=True, 
                         help="Execution mode: 'create' for new features, 'refactor' for legacy code.")
