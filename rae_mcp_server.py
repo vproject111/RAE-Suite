@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 import httpx
@@ -24,7 +23,7 @@ if RAE_CORE_PATH and RAE_CORE_PATH not in sys.path:
 from rae_core.utils.enterprise_guard import RAE_Enterprise_Foundation, audited_operation
 
 from core.autonomy_kernel import AutonomyKernel
-from rae_contracts import ExecutionStatus
+from rae_contracts import ExecutionStatus, QualityStatus
 
 class RAESupervisor:
     def __init__(self):
@@ -48,17 +47,44 @@ class RAESupervisor:
         if receipt.execution_status != ExecutionStatus.SUCCESS:
             return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
 
-        result = subprocess.check_output(
-            ["docker", "ps", "--format", "json"], 
-            stderr=subprocess.STDOUT
-        ).decode()
-        containers = [json.loads(line) for line in result.strip().split('\n') if line]
+        # Enforce Tool Execution Gateway
+        exit_code, stdout, stderr = self.kernel.tool_gateway.execute_tool(
+            trace_id=receipt.trace_id,
+            command=["docker", "ps", "--format", "json"],
+            cwd=".",
+            risk_class=receipt.risk_class
+        )
+        if exit_code != 0:
+            return f"Error executing docker ps: {stderr}"
+
+        containers = [json.loads(line) for line in stdout.strip().split('\n') if line]
         return json.dumps(containers, indent=2)
 
     @audited_operation("run_diagnostic")
-    async def run_diagnostic(self, script_name: str):
+    async def run_diagnostic(self, diagnostic_id: str):
+        # Allowlist of registered diagnostic IDs (diagnostic_id)
+        ALLOWED_DIAGNOSTICS = {
+            "diag-001": {
+                "script": "validate_rae_integration.py",
+                "description": "Validation of RAE integration"
+            },
+            "diag-002": {
+                "script": "test_cognitive_planning_integration.py",
+                "description": "Validation of cognitive planning integration"
+            }
+        }
+
+        if diagnostic_id not in ALLOWED_DIAGNOSTICS:
+            return f"Error: Unauthorized or unknown diagnostic ID: {diagnostic_id}. Only registered diagnostic IDs are permitted."
+
+        diag = ALLOWED_DIAGNOSTICS[diagnostic_id]
+        script_name = diag["script"]
+        script_path = os.path.join("scripts", script_name)
+        if not os.path.exists(script_path):
+            return f"Error: Script {script_name} not found."
+
         # Route through AutonomyKernel first
-        intent = f"Execute diagnostic script {script_name}"
+        intent = f"Execute diagnostic script {script_name} via ID {diagnostic_id}"
         receipt = await self.kernel.execute_task(
             goal_id="mcp-diagnostic-goal",
             task_id="mcp-diag-task",
@@ -68,15 +94,16 @@ class RAESupervisor:
         if receipt.execution_status != ExecutionStatus.SUCCESS:
             return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
 
-        script_path = os.path.join("scripts", script_name)
-        if not os.path.exists(script_path):
-            return f"Error: Script {script_name} not found."
-        
-        result = subprocess.check_output(
-            ["python3", script_path], 
-            stderr=subprocess.STDOUT
-        ).decode()
-        return result
+        # Enforce Tool Execution Gateway
+        exit_code, stdout, stderr = self.kernel.tool_gateway.execute_tool(
+            trace_id=receipt.trace_id,
+            command=["python3", script_path],
+            cwd=".",
+            risk_class=receipt.risk_class
+        )
+        if exit_code != 0:
+            return f"Error executing diagnostic {diagnostic_id}: {stderr}"
+        return stdout
 
     @audited_operation("search_rae_memory")
     async def search_rae_memory(self, query: str, project: str = None, layer: str = None, limit: int = 5):
@@ -91,7 +118,6 @@ class RAESupervisor:
         if receipt.execution_status != ExecutionStatus.SUCCESS:
             return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
 
-        # We don't default project/layer here to allow RAE Engine to use its own context-aware defaults
         payload = {
             "query": query,
             "project": project or self.bridge.project,
@@ -121,12 +147,11 @@ class RAESupervisor:
         if receipt.execution_status != ExecutionStatus.SUCCESS:
             return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
 
-        # We allow layer to be None so RAE Core can decide placement based on info_class/content
         payload = {
             "content": content,
             "project": project or self.bridge.project,
             "human_label": human_label,
-            "layer": layer, # None allows RAE-Core choice
+            "layer": layer,
             "importance": importance,
             "info_class": info_class,
             "metadata": metadata
@@ -156,11 +181,16 @@ class RAESupervisor:
         if receipt.execution_status != ExecutionStatus.SUCCESS:
             return f"Error: Action blocked by Autonomy Kernel. Status: {receipt.execution_status}. State: {receipt.final_state}"
 
-        result = subprocess.check_output(
-            ["docker", "logs", "--tail", str(lines), service], 
-            stderr=subprocess.STDOUT
-        ).decode()
-        return result
+        # Enforce Tool Execution Gateway
+        exit_code, stdout, stderr = self.kernel.tool_gateway.execute_tool(
+            trace_id=receipt.trace_id,
+            command=["docker", "logs", "--tail", str(lines), service],
+            cwd=".",
+            risk_class=receipt.risk_class
+        )
+        if exit_code != 0:
+            return f"Error retrieving logs for {service}: {stderr}"
+        return stdout
 
 supervisor = RAESupervisor()
 server = Server("rae-cloud-supervisor")
@@ -175,13 +205,13 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="run_diagnostic",
-            description="Executes a diagnostic verification script.",
+            description="Executes a registered diagnostic verification script using its diagnostic_id.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "script_name": {"type": "string"}
+                    "diagnostic_id": {"type": "string", "description": "Allowed IDs: diag-001, diag-002"}
                 },
-                "required": ["script_name"],
+                "required": ["diagnostic_id"],
             },
         ),
         types.Tool(
@@ -235,7 +265,7 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.C
         if name == "get_cloud_status":
             res = await supervisor.get_cloud_status()
         elif name == "run_diagnostic":
-            res = await supervisor.run_diagnostic(arguments["script_name"])
+            res = await supervisor.run_diagnostic(arguments["diagnostic_id"])
         elif name == "search_rae_memory":
             res = await supervisor.search_rae_memory(**arguments)
         elif name == "create_rae_memory":
@@ -250,7 +280,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.C
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def main():
-    if os.environ.get("RAE_MCP_SSE") == "1":
+    # Enforce Network SSE Transport as default, stdio as fallback
+    if os.environ.get("RAE_MCP_STDIO") != "1":
         import uvicorn
         from fastapi import FastAPI, Request
         from mcp.server.sse import SseServerTransport

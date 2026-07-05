@@ -73,5 +73,5 @@ services:
     container_name: rae-api-dev-disabled
 
   # Disable conflicting standalone Qdrant from the included memory dev profile
-  rae-qdrant:
+  rae-am-qdrant:
     scale: 0

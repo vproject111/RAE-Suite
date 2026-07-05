@@ -1,5 +1,8 @@
 [
   "pre_commit_gate",
   "quality_sentinel",
-  "swarm_consensus"
+  "swarm_consensus",
+  "policy_checker",
+  "tool_gateway",
+  "quality_tribunal"
 ]

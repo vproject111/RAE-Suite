@@ -17,7 +17,7 @@ class CostAwareRouter:
         if not allowed:
             return None
 
-        # Lexicographical sort with inf fallback
+        # Sort candidate agents by risk, cost (NCU), failure rate and latency
         allowed.sort(key=lambda x: (
             self.RISK_ORDER.get(x.get("risk_class", "low"), 0),
             x.get("estimated_ncu", 0.0),

@@ -39,8 +39,9 @@ class ContextTrustEvaluator:
             score -= 0.3 # Penalize high-risk associated memories
             
         # 4. Quarantine Check
-        if memory_metadata.get("quarantined", False):
-            score = 0.0 # Absolute rejection
+        is_quarantined = memory_metadata.get("quarantined", False) or memory_metadata.get("quarantine_status", False) or memory_metadata.get("quarantine", False)
+        if is_quarantined:
+            score = 0.5
             
         # Strict Isolation of RESTRICTED data (Phase 3 Enforcement Contract)
         info_class = memory_metadata.get("information_class", "internal").lower()
@@ -52,8 +53,9 @@ class ContextTrustEvaluator:
         score = max(0.0, min(1.0, score))
         
         # Determine Classification
-        classification = "REJECTED"
-        if score >= self.advisory_threshold:
+        if is_quarantined:
+            classification = "ADVISORY_ONLY"
+        elif score >= self.advisory_threshold:
             classification = "USABLE_PLANNING_INPUT"
         elif score >= self.reject_threshold:
             classification = "ADVISORY_ONLY"

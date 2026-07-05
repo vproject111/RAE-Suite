@@ -12,9 +12,12 @@ class PolicyChecker:
         self.active_policy_bundle_hash = "sbx-default-policy-v7.0"
 
     def check_compliance(self, risk_assessment: RiskAssessment) -> bool:
-        # Check reasons for explicit violations of C1 or C6 constitution principles
+        # Check reasons for explicit violations of C1 to C6 constitution principles
         for reason in risk_assessment.reasons:
-            if "Violates C1" in reason or "Violates C6" in reason:
+            if any(violation in reason for violation in [
+                "Violates C1", "Violates C2", "Violates C3", "Violates C4", "Violates C5", "Violates C6",
+                "RESTRICTED data processed outside Working layer"
+            ]):
                 return False
         return True
 
@@ -56,9 +59,17 @@ class RiskClassifier:
         reasons = []
         risk_class = RiskClass.R0
         
+        # 1. Check RESTRICTED data isolation principle
+        info_class = (payload.get("information_class") or payload.get("info_class") or "").lower()
+        memory_layer = (payload.get("memory_layer") or payload.get("layer") or "").lower()
+        
+        if info_class == "restricted" and memory_layer != "working":
+            risk_class = RiskClass.R6
+            reasons.append("Violates C6 (Relative Project Paths Only / Layer Isolation): RESTRICTED data processed outside Working layer is forbidden.")
+
         # Cross-reference with Constitutional principles
         # C1: Do no harm to production data
-        if any(kw in intent_lower for kw in ["delete all", "drop database", "expose secret", "steal keys", "bypass policy", "truncate"]):
+        elif any(kw in intent_lower for kw in ["delete all", "drop database", "expose secret", "steal keys", "bypass policy", "truncate"]):
             risk_class = RiskClass.R6
             reasons.append("Violates C1 (Do no harm to production data): Prohibited destructive action.")
             
