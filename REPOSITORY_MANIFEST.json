@@ -1,20 +1,20 @@
 {
   "project": "RAE-Suite",
-  "host_commit_sha": "45b176bdeddda233d6dfc1eacb848aa41df14ff9",
+  "host_commit_sha": "bf04e2c7a3ad8f4b6ab8b6231aca428a2cf680ea",
   "host_branch": "feature/aea-0-repository-manifest",
   "contracts_version": "7.0",
   "submodules": {
     "rae-agentic-memory": {
       "path": "packages/rae-agentic-memory",
-      "commit_sha": "473f9bd60f130e3eefe7e44a4f20e00e0e1ab27d"
+      "commit_sha": "bc7bf1363a61a9b2264d5dfc40034d510d52055b"
     },
     "rae-hive": {
       "path": "packages/rae-hive",
-      "commit_sha": "d4d5088fea836cd6b8df96e77e9f977bb5837d82"
+      "commit_sha": "5b5a6e89561c1ae0d260637568085be24a108289"
     },
     "rae-lab": {
       "path": "packages/rae-lab",
-      "commit_sha": "5c727f3d9e538db526361cc8466390e81fea61c2"
+      "commit_sha": "87118b2c024ca5399097b834a397bdd310480a16"
     },
     "rae-open-claw": {
       "path": "packages/rae-open-claw",
@@ -22,11 +22,11 @@
     },
     "rae-phoenix": {
       "path": "packages/rae-phoenix",
-      "commit_sha": "1703f5632ec821863dcbb43b4973e51a2b8105d2"
+      "commit_sha": "329d657f150dbace210ee40d58c16704fbcd0c5a"
     },
     "rae-quality": {
       "path": "packages/rae-quality",
-      "commit_sha": "ca514b2bb6442bd9c00d9d030f32dbffd3648334"
+      "commit_sha": "1326fcb96ccd226336818f2656c6c9609357032f"
     }
   },
   "supported_capabilities": [
@@ -47,5 +47,5 @@
     "rae-hive": "http://localhost:8013/health"
   },
   "migration_status": "aligned",
-  "generated_at": "2026-07-03T12:58:13Z"
+  "generated_at": "2026-07-05T07:08:12Z"
 }
