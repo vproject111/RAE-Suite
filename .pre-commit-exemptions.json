@@ -3,5 +3,6 @@
   "quality_sentinel",
   "swarm_consensus",
   "policy_checker",
-  "tool_gateway"
+  "tool_gateway",
+  "quality_tribunal"
 ]
