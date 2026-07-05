@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class SandboxManager:
     """
-    Manages isolated execution environments (Git Worktrees) for RAE-Suite.
+    Manages isolated execution environments (Git Worktrees & Secure Docker Containers) for RAE-Suite.
     Ensures that Risk > R1 operations are physically separated from the main codebase.
     """
     def __init__(self, repo_root: str, sandbox_root: Optional[str] = None):
@@ -49,6 +49,34 @@ class SandboxManager:
             logger.critical(f"worktree_creation_failed: {err_msg}")
             raise RuntimeError(f"Fail-Closed Sandbox: Worktree creation failed: {err_msg}")
 
+    def create_container(self, task_id: str, image_digest: str) -> str:
+        """
+        Creates a secure Docker container for task execution.
+        Enforces digest verification, read-only rootfs, cap-drop, and no-new-privileges.
+        """
+        if "@sha256:" not in image_digest:
+            raise ValueError("Security Violation: Docker image must be referenced by SHA-256 digest, not tag.")
+            
+        container_name = f"rae-sbx-{task_id}-{uuid.uuid4().hex[:6]}"
+        logger.info("creating_secure_container", container=container_name, digest=image_digest)
+        
+        cmd = [
+            "docker", "run", "-d",
+            "--name", container_name,
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt", "no-new-privileges:true",
+            image_digest,
+            "sleep", "3600"
+        ]
+        
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            return container_name
+        except subprocess.CalledProcessError as e:
+            err_msg = e.stderr.strip() if e.stderr else str(e)
+            logger.critical(f"container_creation_failed: {err_msg}")
+            raise RuntimeError(f"Fail-Closed Sandbox: Docker container creation failed: {err_msg}")
 
     def cleanup_sandbox(self, sandbox_path: str):
         """
