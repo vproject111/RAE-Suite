@@ -21,6 +21,7 @@ from core.guardrail_manager import GuardrailManager
 from core.context_trust_evaluator import ContextTrustEvaluator
 from core.cognitive_planner import CognitivePlanner
 from core.swarm_consensus import SwarmConsensusEngine
+from core.tool_gateway import ToolGateway
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class AutonomyKernel:
     """
     def __init__(self, bridge, repo_root: str):
         self.bridge = bridge
+        self.tool_gateway = ToolGateway(repo_root)
         self.risk_classifier = RiskClassifier()
         self.policy_checker = PolicyChecker()
         self.gitops = GitOpsDaemon(repo_root)
