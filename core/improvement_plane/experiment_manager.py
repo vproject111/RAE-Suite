@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from core.models.improvement import Experiment
+from rae_core.models.improvement import Experiment
 from core.improvement_plane.improvement_store import ImprovementStore
 
 logger = logging.getLogger(__name__)

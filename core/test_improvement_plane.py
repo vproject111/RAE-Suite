@@ -3,7 +3,7 @@ from core.improvement_plane import (
     ImprovementStore, HypothesisManager, ExperimentManager,
     ShadowRunner, CanaryManager, PromotionGate
 )
-from core.models.improvement import ImprovementProposal
+from rae_core.models.improvement import ImprovementProposal
 
 class MockEvidenceRouter:
     def __init__(self):
@@ -32,8 +32,8 @@ def test_improvement_plane_full_cycle():
     gate = PromotionGate(auditor, store)
     
     # 2. Create Hypothesis
-    h = hyp_mgr.create_hypothesis("hyp-001", "Reduce Latency", "Use async cache lookup")
-    assert h.status == "draft"
+    h = hyp_mgr.create_hypothesis("hyp-001", "Reduce Latency", "Use async cache lookup", "latency")
+    assert h.statement == "Reduce Latency"
     
     # 3. Create Experiment
     e = exp_mgr.create_experiment("exp-001", "Async cache test", "hyp-001", "candidate_code_v1", "success_rate > 0.90")

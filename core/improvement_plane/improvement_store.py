@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, List, Optional
-from core.models.improvement import Hypothesis, Experiment, ExperimentRun
+from rae_core.models.improvement import Hypothesis, Experiment, ExperimentRun
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class ImprovementStore:
 
     def save_hypothesis(self, h: Hypothesis):
         self._hypotheses[h.hypothesis_id] = h
-        logger.info(f"improvement_store: Saved hypothesis {h.hypothesis_id} ({h.name})")
+        logger.info(f"improvement_store: Saved hypothesis {h.hypothesis_id} ({h.statement})")
 
     def get_hypothesis(self, h_id: str) -> Optional[Hypothesis]:
         return self._hypotheses.get(h_id)

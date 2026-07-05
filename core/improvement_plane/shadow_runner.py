@@ -1,8 +1,8 @@
 import logging
 import uuid
 from typing import Dict, Any
-from core.models.improvement import Experiment, ExperimentRun
-from core.models.evidence import ActionRecord
+from rae_core.models.improvement import Experiment, ExperimentRun
+from rae_core.models.evidence import ActionRecord
 
 logger = logging.getLogger(__name__)
 
