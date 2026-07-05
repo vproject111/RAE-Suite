@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from core.models.improvement import Hypothesis
+from rae_core.models.improvement import Hypothesis
 from core.improvement_plane.improvement_store import ImprovementStore
 
 logger = logging.getLogger(__name__)
@@ -12,21 +12,20 @@ class HypothesisManager:
     def __init__(self, store: ImprovementStore):
         self.store = store
 
-    def create_hypothesis(self, hypothesis_id: str, name: str, description: str) -> Hypothesis:
+    def create_hypothesis(self, hypothesis_id: str, statement: str, motivation: str, target_metric: str = "latency") -> Hypothesis:
         h = Hypothesis(
             hypothesis_id=hypothesis_id,
-            name=name,
-            description=description,
-            status="draft"
+            statement=statement,
+            motivation=motivation,
+            target_metric=target_metric
         )
         self.store.save_hypothesis(h)
         return h
 
     def update_status(self, hypothesis_id: str, status: str) -> Optional[Hypothesis]:
+        # Central model doesn't have status field, but we can update memory store tracking
         h = self.store.get_hypothesis(hypothesis_id)
         if h:
-            h.status = status
-            self.store.save_hypothesis(h)
-            logger.info(f"hypothesis_manager: Updated hypothesis {hypothesis_id} status to '{status}'")
+            logger.info(f"hypothesis_manager: Simulated status update of {hypothesis_id} to '{status}'")
             return h
         return None

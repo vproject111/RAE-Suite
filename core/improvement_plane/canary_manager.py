@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any
-from core.models.improvement import RollbackDecision
+from rae_core.models.improvement import RollbackDecision
 
 logger = logging.getLogger(__name__)
 

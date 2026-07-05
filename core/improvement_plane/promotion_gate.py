@@ -1,6 +1,6 @@
 import logging
 from typing import List
-from core.models.improvement import ImprovementProposal, PromotionDecision, ExperimentRun
+from rae_core.models.improvement import ImprovementProposal, PromotionDecision, ExperimentRun
 
 logger = logging.getLogger(__name__)
 
