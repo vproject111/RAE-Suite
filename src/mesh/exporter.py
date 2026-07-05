@@ -27,7 +27,7 @@ KAŻDA WYMIANA WYMAGA:
 import uuid
 import logging
 from typing import Union, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from rae_core.models.mesh import MeshExchangeEnvelope, ConsentGrant, MeshPeer
 from rae_core.models.improvement import InsightPack, FailurePatternPack
 
@@ -71,11 +71,11 @@ class MeshExporter:
         # Determine provenance
         provenance = {
             "source_instance": "rae-suite-main",
-            "compiled_at": datetime.utcnow().isoformat(),
+            "compiled_at": datetime.now(timezone.utc).isoformat(),
             "operator_role": "lab_compiler"
         }
 
-        expires_at = datetime.utcnow() + timedelta(days=consent_grant.ttl_days or 30)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=consent_grant.ttl_days or 30)
 
         envelope = MeshExchangeEnvelope(
             envelope_id=str(uuid.uuid4()),
