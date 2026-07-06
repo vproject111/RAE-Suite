@@ -12,6 +12,15 @@ The system consists of 5 specialized modules connected into a single neural netw
 4.  **[RAE-Quality](packages/rae-quality)**: Autonomous Quality Guard. Performs continuous security testing (SAST) and verifies code coverage.
 5.  **[RAE-Lab](packages/rae-lab)**: Intelligence Observatory. Analyzes experiment results and implements the Kaizen strategy (continuous improvement).
 
+## 🧠 Intelligent Orchestration & Autonomy Kernel (AEA Features)
+
+RAE-Suite incorporates advanced AI engineering patterns from the **Agentic Engineering Addendum (AEA v3.0)**:
+
+*   **Federated Message Templates:** Layered prompts (`Base` → `Org` → `Team` → `Feature`) compiled deterministically with SHA-256 signatures via `FederatedPromptRegistry`.
+*   **Streaming Function Composition:** Real-time token piping via `StreamingFunctionComposer` allowing eager execution of early steps (e.g. sandbox setup) before the planner completes full generation.
+*   **OTEL Trace Propagation:** Distributed W3C Trace Context propagation (`traceparent` header) via `TraceContextPropagator` across all suite modules.
+*   **Trajectory Replay CLI:** Command-line debugging console (`scripts/rae.py`) supporting `inspect`, `replay`, and `fork` commands to replay or fork trajectories at specific steps.
+
 ## 🛡️ Standards & Security
 *   **ISO 27001 Compliance**: Full separation of duties and auditability of every agent action.
 *   **Hard Frames 2.1**: Rigorous contractual frameworks preventing AI hallucinations.
