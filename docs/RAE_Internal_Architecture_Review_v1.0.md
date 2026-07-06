@@ -138,7 +138,7 @@ Klasa `ProbabilisticSemanticCache` implementuje cache semantyczny oparty o cosin
 ### 3.8. Spekulatywne wywoływanie narzędzi ([speculative_executor.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/speculative_executor.py))
 Klasa `SpeculativeToolExecutor` przyspiesza czas odpowiedzi o ~40%.
 - Przed ostatecznym potwierdzeniem planu przez model, system wykrywa bezpieczne, idempotentne komendy (np. `git status`, `docker ps`, skrypty diagnostyczne) i uruchamia je w tle w maksymalnej liczbie $k=3$ równolegle.
-- Wyniki są gotowe w cache zanim model zatwierdzi ich wywołanie.
+- Wyniki are ready in cache before the model commits.
 
 ---
 
@@ -191,7 +191,7 @@ Wdrożono twarde limity czasowe przywracania sprawności systemu:
 - **Koszt:** Bezpośrednia normalizacja nazw warstw (np. `episodic_memory` -> `episodic`) w surowym SQL, z pominięciem ORM i blokad Alembica.
 - **Efekt:** Odzyskano bezstratnie **18 995 wspomnień semantycznych** oraz **131 wspomnień epizodycznych**, przywracając system do pełnej sprawności.
 
-### 4.4. Czyszczenie długu typowania (Mypy) i deprecations FastAPI
+### 5.4. Czyszczenie długu typowania (Mypy) i deprecations FastAPI
 - **Co zrobiono:** Redukcja błędów Mypy z 1290 do 462. Usunięto ostrzeżenia deprecation FastAPI dotyczące `HTTP_422_UNPROCESSABLE_ENTITY` oraz wdrożono brakujące metody `executemany` i `acquire` w `IDatabaseProvider`.
 - **Dlaczego:** Utrzymanie polityki "Zero Warning Policy" i stabilności typów dla transakcji masowych.
 - **Koszt:** Czas deweloperski na przepisanie sygnatur i naprawę testów asynchronicznych.
@@ -231,13 +231,27 @@ Definiuje interfejsy i modele matematyczne. Sercem silnika jest [RAEEngine](file
 Realizuje FastAPI Web Server. Odpowiada za integrację adapterów baz danych i realizację polityki retencji przez [retention_service.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/packages/rae-agentic-memory/apps/memory_api/services/retention_service.py).
 
 ### 7.3. Autonomiczna refaktoryzacja (`rae-phoenix`)
-Implementuje logikę automatycznej modyfikacji kodu w zamkniętej pętli w oparciu o wtyczki językowe. Wejście stanowi kod źródłowy z błędami lintera/testów, a wyjściem jest gotowy patch (do 5 prób naprawczych).
+Moduł `rae-phoenix` (Feniks Kernel) odpowiada za analizę kodu, generowanie poprawek (recipes) i weryfikację ich działania w pętli zamkniętej.
+- **Silnik Refaktoryzacji ([refactor_engine.py](file:///home/grzegorz-lesniowski/cloud/RAE-Phoenix/feniks/core/refactor/refactor_engine.py)):** Klasa `RefactorEngine` zarządza wyborem przepisu (Recipe Selection), analizą i planowaniem, generowaniem poprawek w oparciu o `PatchGenerator` oraz weryfikacją behawioralną.
+- **Weryfikacja behawioralna (Behavioral Validation):** Metoda `RefactorEngine.validate_behavior()` pobiera scenariusze i kontrakty legacy i uruchamia je na kandydacie (zmienionym kodzie) za pomocą dedykowanych środowisk uruchomieniowych: `PythonRunner` (dla kodu Python) oraz `UIRunner` (dla kodu JS/TS).
+- **Zasada Safety Umbrella ([behavior.py](file:///home/grzegorz-lesniowski/cloud/RAE-Phoenix/feniks/core/models/behavior.py)):** Scenariusze behawioralne są reprezentowane przez interfejsy `UIAction`, `APIRequest` oraz `CLICommand`, reprezentujące surowe, historyczne interakcje.
+- **Silnik Porównywania Kontraktów ([contract_engine.py](file:///home/grzegorz-lesniowski/cloud/RAE-Phoenix/feniks/core/behavior/contract_engine.py)):** Klasa `ContractEngine` porównuje wygenerowane migawki behawioralne (`BehaviorSnapshot`) z kontraktem za pomocą `BehaviorComparisonEngine`. Zgodnie z ISO 42001 weryfikuje powiązanie pochodzenia (provenance check) i wywołuje natychmiastowe przerwanie pętli przy współczynniku ryzyka `risk_score > 0.7`.
+- **Dedykowane przepisy (Recipes):** Obsługuje silnik dynamicznej migracji Angulara (`AngularMigrationRecipe`), transformacje obiektowe PHP (`PhpEnterpriseRecipe`) oraz potoki Pythona (`PythonPipelineRecipe`).
 
 ### 7.4. Izolowane wykonawstwo (`rae-hive`)
 Zarządza uruchamianiem skryptów w piaskownicach Dockera lub wydzielonych gałęziach (worktrees), chroniąc środowisko hosta.
 
 ### 7.5. Brama Jakości i Trybunał (`rae-quality`)
-Trybunał weryfikuje zmiany kodu pod kątem bezpieczeństwa (SAST) i pokrycia testami. Klasyfikuje zmiany za pomocą `SeniorityRanker`. Zapobiega oszukiwaniu testów poprzez `TestIntegrityGuard`.
+Moduł `rae-quality` to brama walidacyjna kodu, pełniąca rolę niezależnego audytora w systemie.
+- **Weryfikacja Git Flow & SemVer Branch Guard:** Plik [main.py](file:///home/grzegorz-lesniowski/cloud/RAE-Quality/main.py) zmusza moduł na poziomie startu do walidacji struktury gałęzi za pomocą `VersioningValidator` (ustawienie `strict=True`), uniemożliwiając uruchomienie usługi przy niezgodności SemVer.
+- **Klasyfikacja Deweloperów (Seniority Ranking):** Klasa `SeniorityRanker` szacuje dynamicznie poziom kodu na podstawie pokrycia testami, złożoności oraz typowania w oparciu o wagowy algorytm:
+  $$Score = 0.4 \cdot Coverage + 0.3 \cdot (1.0 - ComplexityRatio) + 0.3 \cdot TypeSafety$$
+  Klasyfikuje kod w przedziale od `Junior Developer` do `Advanced Senior` (dla punktacji $\ge 0.90$).
+- **Sąd Trybunału Jakości ([tribunal.py](file:///home/grzegorz-lesniowski/cloud/RAE-Quality/engines/governance/tribunal.py)):** Klasa `QualityTribunal` przeprowadza zaawansowany, trójwarstwowy audyt jakości:
+  * *Tier 1: Deterministic Guards:* Statyczne, błyskawiczne filtry wykluczające brakujące importy, błędy składniowe w AST (`ast.parse`) oraz tagi placeholders (`TODO`/`FIXME`).
+  * *Tier 2: Local Semantic Consensus:* Weryfikacja semantyczna z użyciem lokalnego agenta LLM zasilanego kontekstem wyciągniętym z pamięci (`rae-local-reasoner` na bazie modelu z Ollama).
+  * *Tier 3: Supreme Court:* Weryfikacja krytycznych poprawek przy użyciu modeli komercyjnych (np. Gemini/GPT-4) za pośrednictwem Bridge.
+- **Autonomiczna pętla naprawcza (Enforcement Logic):** Metoda `QualitySentinel._enforce_verdict()` przy werdykcie `Verdict.REJECTED` wysyła automatyczny komunikat refaktoryzacyjny `REFACTOR_CODE` przez mostek komunikacyjny (`/v2/bridge/interact`) do `rae-phoenix`, zmuszając go do naprawy błędów.
 
 ### 7.6. Laboratorium ewolucyjne (`rae-lab`)
 Zbiera telemetrię i stroi wagi za pomocą algorytmu Multi-Armed Bandit w [metrics_aggregator.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/packages/rae-lab/metrics_aggregator.py), dążąc do minimalizacji kosztów tokenów przy zachowaniu wysokiej dokładności.
@@ -254,15 +268,17 @@ Na podstawie audytu kodu źródłowego w głównym repozytorium `RAE-Suite` oraz
 | **Tool Execution Gateway** | [tool_gateway.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/tool_gateway.py) | **W pełni zaimplementowane** |
 | **Policy Engine & Risk Classifier** | [policy_checker.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/policy_checker.py) | **W pełni zaimplementowane** |
 | **Context Envelope** | [context_broker.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/context_broker.py) | **W pełni zaimplementowane** |
-| **Batch Optimization Engine** | [batch_engine.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/batch_engine.py) | **W pełni zaimplementowane** |
 | **Adaptive Retrieval Depth** | [context_broker.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/context_broker.py) | **W pełni zaimplementowane** |
+| **Hierarchical Context Pruning** | [context_broker.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/context_broker.py) | **W pełni zaimplementowane** |
+| **Batch Optimization Engine** | [batch_engine.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/batch_engine.py) | **W pełni zaimplementowane** |
+| **Agent Warm State Routing** | [autonomy_kernel.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/autonomy_kernel.py) | **W pełni zaimplementowane** |
 | **Quality Tribunal Consensus** | [quality_tribunal.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/quality_tribunal.py) | **W pełni zaimplementowane** |
 | **Probabilistic Cache Invalidation** | [semantic_cache.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/semantic_cache.py) | **W pełni zaimplementowane** |
 | **Speculative Tool Execution** | [speculative_executor.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/speculative_executor.py) | **W pełni zaimplementowane** |
 | **Failure Mining & Shadow Mode** | [shadow_evaluator.py](file:///home/grzegorz-lesniowski/cloud/RAE-Suite/core/shadow_evaluator.py) | **W pełni zaimplementowane** |
-| **Federated Message Templates** | - | *Planowane do wdrożenia (Faza P0)* |
-| **Streaming Function Composition** | - | *Planowane do wdrożenia (Faza P1)* |
-| **OTEL Trace Propagation** | - | *Planowane do wdrożenia (Faza P1)* |
-| **Trajectory Replay CLI (`rae replay`)** | - | *Planowane do wdrożenia (Faza P2)* |
+| **Federated Message Templates** | - | *Planowane (Faza P0)* |
+| **Streaming Function Composition** | - | *Planowane (Faza P1)* |
+| **OTEL Trace Propagation** | - | *Planowane (Faza P1)* |
+| **Trajectory Replay CLI (`rae replay`)** | - | *Planowane (Faza P2)* |
 
 Kolejnym krokiem inżynieryjnym w projekcie będzie realizacja brakujących integracji (szablony federacyjne i CLI replay) zgodnie z liniowym harmonogramem wdrożenia RAE Suite v3.0.
