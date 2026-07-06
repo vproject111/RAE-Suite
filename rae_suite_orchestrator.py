@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 from core.infra_reconciler import InfraReconciler
 from core.autonomy_kernel import AutonomyKernel
 from core.curiosity_engine import CuriosityEngine
+from core.batch_engine import BatchOptimizationEngine, BatchTask
 import uuid
 
 try:
@@ -49,6 +50,7 @@ class RAE_CEO_Orchestrator:
         self.kernel = AutonomyKernel(bridge=self.bridge, repo_root=".")
         self.curiosity_engine = CuriosityEngine(kernel=self.kernel, repo_root=".")
         self.planning_agent = os.getenv("CEO_PLANNING_AGENT", "rae-oracle-gemini")
+        self.batch_engine = BatchOptimizationEngine()
 
     async def run_loop(self):
         logger.info("orchestrator_booted", role="CEO_Agent", mode="Declarative Reconciler")
@@ -69,20 +71,45 @@ class RAE_CEO_Orchestrator:
                         await self._align_drift(drift)
                     self.last_action_time = datetime.utcnow()
                 else:
-                    # If stable, prioritize outstanding items in the development backlog
-                    decision = await self._decide_backlog_action(actual_state)
-                    if decision.get("intent") != "IDLE":
-                        # Audit strategic decision
-                        self._log_signed_decision(
-                            action="strategy_selected",
-                            reasoning=decision.get("reasoning", "Executing backlog task."),
-                            payload={"target_agent": decision.get("agent"), "backlog_count": len(actual_state["backlog"])}
-                        )
-                        await self._dispatch_action(decision)
-                        self.last_action_time = datetime.utcnow()
+                    # Queue backlog items into Batch Engine (Context Economy Optimization)
+                    backlog = actual_state.get("backlog", [])
+                    if backlog:
+                        for task in backlog:
+                            # Map task to BatchTask
+                            self.batch_engine.add_task(BatchTask(
+                                task_id=task.get("id", f"tsk-{uuid.uuid4().hex[:6]}"),
+                                module="phoenix" if "phoenix" in task.get("content", "").lower() else "hive",
+                                target_file=task.get("project", "main.py"),
+                                action_type="refactor" if "phoenix" in task.get("content", "").lower() else "test",
+                                complexity=0.5
+                            ))
+                        
+                        batches = self.batch_engine.optimize_and_group()
+                        if batches:
+                            logger.warning("batch_optimization_found_groups", count=len(batches))
+                            for batch in batches:
+                                await self._dispatch_batch(batch)
+                            self.last_action_time = datetime.utcnow()
+                        else:
+                            # If stable, prioritize outstanding items in the development backlog
+                            decision = await self._decide_backlog_action(actual_state)
+                            if decision.get("intent") != "IDLE":
+                                await self._dispatch_action(decision)
+                                self.last_action_time = datetime.utcnow()
                     else:
-                        logger.info("system_fully_aligned_and_stable")
-                        await self.curiosity_engine.trigger_idle_scan()
+                        decision = await self._decide_backlog_action(actual_state)
+                        if decision.get("intent") != "IDLE":
+                            # Audit strategic decision
+                            self._log_signed_decision(
+                                action="strategy_selected",
+                                reasoning=decision.get("reasoning", "Executing backlog task."),
+                                payload={"target_agent": decision.get("agent"), "backlog_count": len(actual_state["backlog"])}
+                            )
+                            await self._dispatch_action(decision)
+                            self.last_action_time = datetime.utcnow()
+                        else:
+                            logger.info("system_fully_aligned_and_stable")
+                            await self.curiosity_engine.trigger_idle_scan()
 
             except Exception as e:
                 logger.error("reconciliation_cycle_failed", error=str(e))
@@ -218,6 +245,46 @@ class RAE_CEO_Orchestrator:
         )
         
         logger.info("task_lifecycle_completed", receipt_id=receipt.receipt_id, status=receipt.execution_status)
+
+    async def _dispatch_batch(self, batch):
+        """Dispatches a batch of tasks via the Autonomy Kernel to optimize context switches."""
+        logger.warning("ceo_dispatching_batch", batch_id=batch.batch_id, count=len(batch.tasks))
+        
+        # Calculate savings
+        tokens_saved, duration_saved = self.batch_engine.dispatch_batch(batch)
+        
+        # Log to bridge
+        self.bridge.save_event(
+            f"Wysłano paczkę zadań {batch.batch_id} (moduł: {batch.module}) do jądra autonomii. "
+            f"Zaoszczędzono: {tokens_saved} tokenów, {duration_saved:.1f}s przezbrojeń.",
+            layer="reflective"
+        )
+        
+        # Serialize tasks for payload
+        tasks_payload = []
+        for t in batch.tasks:
+            tasks_payload.append({
+                "task_id": t.task_id,
+                "file": t.target_file,
+                "action": t.action_type
+            })
+            
+        receipt = await self.kernel.execute_task(
+            goal_id=f"goal-batch-{batch.batch_id}",
+            task_id=f"task-batch-{batch.batch_id}",
+            intent=f"BATCH_EXECUTION: {batch.module} tasks",
+            payload={
+                "target_agent": "rae-phoenix" if batch.module == "phoenix" else "rae-hive",
+                "batch_id": batch.batch_id,
+                "tasks": tasks_payload,
+                "metrics": {
+                    "tokens_saved": tokens_saved,
+                    "duration_saved": duration_saved,
+                    "batch_size": len(batch.tasks)
+                }
+            }
+        )
+        logger.info("batch_lifecycle_completed", receipt_id=receipt.receipt_id, status=receipt.execution_status)
 
 if __name__ == "__main__":
     orchestrator = RAE_CEO_Orchestrator()
