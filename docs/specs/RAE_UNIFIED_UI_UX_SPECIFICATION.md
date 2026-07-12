@@ -98,10 +98,39 @@ Ujednolicony interfejs webowy integruje wszystkie 5 modułów suity RAE w jednym
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Elementy Integracyjne:
+### A. Elementy Integracyjne Ogólne:
 1.  **Monitor Pracy Agentów (Gantt Live-view):** Pokazuje, który moduł aktualnie wykonuje zadanie w piaskownicy w czasie rzeczywistym (Phoenix analizuje, Hive odpala testy, Quality przeprowadza sąd 3-warstwowy).
 2.  **Cognitive Space Explorer:** Interaktywna wizualizacja grafu pamięci semantycznej z możliwością przeszukiwania i ręcznej edycji wspomnień.
 3.  **Audit & Decision Ledger View:** Tabela pokazująca podpisane dowody decyzji (SLA wycofań, `@audited_operation` oraz statusy poprawek).
+
+### B. Szczegółowa Integracja Pamięci (RAE-agentic-memory):
+Interfejs webowy oferuje bezpośrednie instrumenty kontroli nad bazami poznawczymi:
+1.  **Konsola Wyszukiwania Hybrydowego (Dynamic Search Console):**
+    *   *Opis:* Panel sterowania pozwalający operatorowi ręcznie włączać/wyłączać silniki wyszukiwania (`enable_vector_search`, `enable_semantic_search`, `enable_graph_search`, `enable_fulltext_search`) w celach porównawczych.
+    *   *Porównanie Strategii (Strategy Comparison):* Wyświetlanie wyników zapytania obok siebie w podziale na aktywną strategię matematyczną (np. `system_37_hyper` vs `system_41_scalpel`) wraz z metrykami trafności i czasem odpowiedzi w ms.
+    *   *Suwaki Wag (Manual Weight Configurator):* Ręczne strojenie wag poznawczych (Relevance, Importance, Recency, Centrality, Diversity, Density) z natychmiastowym podglądem re-rankingu.
+2.  **Krzywa Rozpadu Pamięci (Decay Curve & Retention Graph):**
+    *   *Opis:* Wykres liniowy (eCharts) obrazujący spadek istotności (`importance_decay`) i siły wspomnień w czasie.
+    *   *Zarządzanie retencją:* Tabela wspomnień z możliwością ręcznego zablokowania rozpadu (Protection Pin) zgodnie z parametrem `MEMORY_IMPORTANCE_PROTECTED_THRESHOLD_DAYS`.
+3.  **Konsola Konsolidacji (Reflection & Dreaming Control):**
+    *   *Opis:* Wskaźnik stanu asynchronicznego procesu konsolidacji marzeń sennych (`DREAMING_ENABLED`).
+    *   *Wycinki refleksji:* Ręczne wyzwalanie syntezy epizodycznej do semantycznej oraz podgląd wygenerowanych przez LLM "Lessons Learned".
+4.  **Panel Klasyfikacji i Dzierżawy (Multi-Tenancy & Data Classification):**
+    *   *Opis:* Przełącznik aktywnego kontekstu klienta (`X-Tenant-Id`) oraz wizualne flagowanie poufności zasobów (`RESTRICTED` / `INTERNAL`).
+
+### C. Szczegółowa Integracja Laboratorium (RAE-Lab):
+Interfejs umożliwia wizualne monitorowanie i sterowanie ewolucją zachowania systemowego:
+1.  **Monitor Uczenia Bandit (MAB Tuner Dashboard):**
+    *   *Opis:* Dynamiczny wykres kołowy i liniowy pokazujący aktualne wagi decyzji modelu (`alpha` dokładność, `beta` opóźnienie, `gamma` koszt) strojne przez algorytm Multi-Armed Bandit.
+    *   *Granice bezpieczeństwa:* Wizualizacja twardych barier `[0.05, 0.85]` uniemożliwiających dominację jednej metryki.
+2.  **Statystyki Ekonomii Kontekstu (Context Economy Metrics):**
+    *   *Opis:* Zestaw kart KPI prezentujący:
+        *   **Context Switch Cost (CSC):** Koszt czasowy i tokenowy przełączania zadań.
+        *   **Batch Gain:** Rzeczywisty czas i tokeny zaoszczędzone dzięki grupowaniu zadań przez `BatchOptimizationEngine` (wizualizacja zysków z serii).
+        *   **Amortization Rate:** Stosunek kosztu setupu środowiska do liczby wykonanych operacji w sandboxie.
+3.  **Tryb Cienia i Ewaluacja Modeli (Shadow Mode & Model Evaluator):**
+    *   *Opis:* Panel porównujący na żywo dokładność modelu produkcyjnego z modelami testowymi uruchomionymi w tle (`Shadow Model Evaluation`).
+    *   *Failure Mining:* Sekcja wyświetlająca wykryte anomalie z logów i wygenerowane reguły obronne (`Candidate Guardrails`) oczekujące na zatwierdzenie.
 
 ---
 
@@ -130,3 +159,15 @@ Ujednolicony interfejs webowy integruje wszystkie 5 modułów suity RAE w jednym
 ### Iteracja 3: Rejestracja Metryk Cache-Bustera i Zakończenie Wdrożenia
 *   Dodanie automatycznego haszowania zasobów podczas budowania dystrybucji Windows.
 *   Weryfikacja wydajności na słabym urządzeniu testowym (cel: czas ładowania UI < 1.5s na sieci 3G/lokalnym procesorze mobile).
+
+---
+
+## 7. Integracja i Wizualizacja Wymogów Zgodności (ISO 27001 & ISO 42001)
+
+Ujednolicony interfejs webowy bezpośrednio odzwierciedla i wizualizuje mechanizmy zgodności z normami ISO wdrożone w silniku RAE. Poniższa tabela przedstawia mapowanie tych funkcji (Kto, Co, Dlaczego, Koszt i Efekt) oraz sposób ich prezentacji w UI:
+
+| Funkcja ISO | Kto i Co Zrobił | Dlaczego (Cel) | Koszt Wdrożenia | Efekt Systemowy | Wizualizacja w UI |
+|---|---|---|---|---|---|
+| **Refaktoryzacja Baz Danych (ISO 42001 Lineage)** | **Grzegorz Leśniowski & Antigravity Core:** Wyodrębniono kolumny `session_id`, `project`, `source`, `ttl` z JSONB do indeksowanych kolumn Postgres. | Spowolnienie Dashboardu przez brak indeksów na JSONB oraz potrzeba jawnego śledzenia pochodzenia danych (provenance) do audytu retencji AI. | Stworzenie migracji Alembic phase4, dostosowanie `PostgreSQLStorage` i modelu memories. | Czas zapytania na Dashboardzie spadł z 3.5s do 0.2s (indeksy B-Tree). Pełna zgodność lineage. | **Decision Lineage Audit Trail:** Tabela w widoku "Audit & Decision Ledger" pokazująca historię i źródła każdego zapisanego wspomnienia. |
+| **Automatyczne Wycofanie i Kwarantanna (ISO 27001 ISMS)** | **Antigravity Core:** Wdrożenie `RollbackManager` i stanów `IncidentScope` (LOCAL, SERVICE_GROUP, GLOBAL). | Zapewnienie ciągłości działania (Business Continuity) i automatyczne usuwanie skutków awarii bez udziału człowieka. | Asynchroniczna maszyna stanów, integracja z git-worktree oraz przywracanie kolekcji Qdrant z migawek. | Czas przywrócenia sprawności kontenera/kodu spadł poniżej 15-60 sekund w pełnej kwarantannie. | **SLA Rollback Monitors:** Liczniki czasu rzeczywistego w UI pokazujące czas do automatycznego restartu/przywrócenia w przypadku incydentu. |
+| **Izolacja Danych Niejawnych (ISO 27001 & ISO 42001 Security)** | **Antigravity Core:** Blokady w `RAECoreService` niepozwalające danym oznaczonym jako `RESTRICTED` opuścić warstwy `Working`. | Zapobieganie wyciekom kluczy API, tokenów i danych poufnych klientów do publicznych repozytoriów open-source. | Opracowanie mechanizmu filtrowania i autoryzacji `_enforce_security_policy` w potoku pamięci. | Bezpieczna ekstrakcja pomysłów przez warstwę `Reflective` (dane open-source) bez ryzyka wycieku surowych sekretów. | **Information Classification Badges:** Kontenery i zasoby w UI są otagowane kolorami bezpieczeństwa (`RESTRICTED` - czerwony, `INTERNAL` - niebieski). Wyświetlanie ostrzeżeń przy próbie naruszenia zasad. |
