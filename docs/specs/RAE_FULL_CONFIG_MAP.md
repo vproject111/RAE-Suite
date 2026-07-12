@@ -1,10 +1,10 @@
 # RAE Full Configuration Map (Silicon Oracle v5.0)
 
-**Kompleksowy rejestr zmiennych środowiskowych, plików konfiguracyjnych i domyślnych wartości na każdym poziomie suity RAE**  
+**Kompleksowy rejestr zmiennych środowiskowych, plików konfiguracyjnych, strategii i domyślnych wartości na każdym poziomie suity RAE**  
 **Klasyfikacja:** Techniczna / Dokumentacyjna  
 **Status:** ZWERYFIKOWANY Z KODEM ŹRÓDŁOWYM  
 
-Dokument ten inwentaryzuje wszystkie parametry konfiguracyjne każdego modułu wchodzącego w skład ekosystemu RAE. Umożliwia precyzyjne dostrajanie zachowania agentów, pamięci wektorowej, baz danych oraz polityk bezpieczeństwa.
+Dokument ten inwentaryzuje wszystkie parametry konfiguracyjne, dynamiczne strategie wyszukiwania oraz polityki zatwierdzania jakości każdego modułu wchodzącego w skład ekosystemu RAE.
 
 ---
 
@@ -30,78 +30,62 @@ Jądro orkiestracji CEO jest sterowane przez zmienne środowiskowe oraz plik spe
 
 ---
 
-## 2. Konfiguracja Pamięci (rae-agentic-memory)
+## 2. Konfiguracja Pamięci i Strategii Wyszukiwania (rae-agentic-memory)
 
-Najbardziej rozbudowany moduł konfiguracyjny (`apps/memory_api/config.py`). Wykorzystuje bibliotekę `pydantic-settings` do walidacji.
+Moduł pamięci poznawczej udostępnia zaawansowaną konfigurację bazodanową oraz wybór matematycznych i językowych strategii wyszukiwania.
 
-### A. Baza danych i Wektory:
-*   `POSTGRES_HOST` (Domyślnie: `rae-am-postgres`): Host PostgreSQL (z rozszerzeniem pgvector).
-*   `POSTGRES_DB` (Domyślnie: `rae`): Nazwa bazy danych.
-*   `POSTGRES_USER` (Domyślnie: `rae`): Użytkownik bazy danych.
-*   `POSTGRES_PASSWORD` (Domyślnie: `rae_password`): Hasło do bazy danych.
-*   `QDRANT_HOST` (Domyślnie: `rae-am-qdrant`): Host silnika wektorowego Qdrant.
-*   `QDRANT_PORT` (Domyślnie: `6333`): Port usługi Qdrant.
-*   `CELERY_BROKER_URL` (Domyślnie: `redis://rae-am-redis:6379/1`): Kolejka zadań Celery.
-*   `CELERY_RESULT_BACKEND` (Domyślnie: `redis://rae-am-redis:6379/2`): Miejsce zapisu wyników Celery.
-*   `REDIS_URL` (Domyślnie: `redis://rae-am-redis:6379/0`): Baza danych Redis dla cache i rate-limitera.
+### A. Tryby i Strategie Wyszukiwania Hybrydowego (`routes/hybrid_search.py`):
+Wyszukiwanie hybrydowe pozwala na włączanie i wyłączanie poszczególnych silników wyszukiwania w zapytaniu:
+*   `enable_vector_search` (Toggles: `True`/`False`): Wyszukiwanie podobieństwa wektorowego w chmurze punktów Qdrant.
+*   `enable_semantic_search` (Toggles: `True`/`False`): Wyszukiwanie pojęciowe oparte o kluczowe węzły semantyczne.
+*   `enable_graph_search` (Toggles: `True`/`False`): Wyszukiwanie powiązań relacyjnych poprzez graf wiedzy (z limitem głębokości `graph_max_depth`, domyślnie `3`).
+*   `enable_fulltext_search` (Toggles: `True`/`False`): Klasyczne wyszukiwanie tekstowe z użyciem indeksu GIN i wildcardów (`*`).
+*   `enable_reranking` (Toggles: `True`/`False`): Włączenie dodatkowego stopnia rerankingu wyników.
 
-### B. Silniki LLM i Embeddings:
-*   `RAE_EMBEDDING_BACKEND` (Domyślnie: `onnx`): Backend generowania embeddingów (np. `onnx` dla lokalnych modeli ONNX bez wyjścia do sieci, `api` dla chmurowych).
-*   `RAE_LLM_MODEL_DEFAULT` (Domyślnie: `ollama/qwen2.5:1.5b`): Domyślny model do syntezy.
-*   `OLLAMA_API_URL` (Domyślnie: `http://ollama-dev:11434`): Adres serwera Ollama.
-*   `RAE_LLM_BACKEND` (Domyślnie: `ollama`): Wybrany backend wnioskowania.
-*   `EXTRACTION_MODEL` (Domyślnie: `gpt-4o-mini`): Model do ekstrakcji encji.
-*   `SYNTHESIS_MODEL` (Domyślnie: `gpt-4o`): Model do zaawansowanej syntezy refleksyjnej.
-*   `RAE_RERANKER_BACKEND` (Domyślnie: `emerald`): Wybrany model rerankera (np. `emerald` lub `math`).
-*   `RAE_USE_GPU` (Domyślnie: `False`): Flaga włączająca akcelerację GPU CUDA dla modeli ONNX.
+### B. Wagi i Strategie Manifold (Math logic_gateway.py):
+Wybór aktywnego ramienia matematycznego fusion (Manifold Arm) w jądrze poznawczym:
+*   `system_1_ib` (System 1 - Implicit Behavior): Szybkie, heurystyczne łączenie na podstawie powtarzalnych wzorców zachowań.
+*   `system_37_hyper`: Hiperwymiarowa synteza wektorowa przeznaczona do złożonych korelacji faktów.
+*   `system_41_scalpel`: Precyzyjne, lingwistyczne cięcie kontekstu (słowa kluczowe i metadane).
+*   `system_100_fluid`: Płynne łączenie uwzględniające silny rozpad czasowy i dynamiczną ważność wspomnień.
+*   `legacy_416`: Klasyczna strategia hybrydowa RAE v2.6.
+*   `silicon_oracle` (Wybór domyślny): Produkcyjna, wielowarstwowa synteza poznawcza (najwyższa precyzja).
 
-### C. Bezpieczeństwo i Wielodostępność (Tenancy & Security):
-*   `TENANCY_ENABLED` (Domyślnie: `True`): Włączenie izolacji danych według klientów (Multi-Tenancy).
-*   `DEFAULT_TENANT_UUID` (Domyślnie: `00000000-0000-0000-0000-000000000000`): Domyślny UUID dzierżawcy.
-*   `ENABLE_API_KEY_AUTH` (Domyślnie: `False`): Włączenie autoryzacji tokenem API.
-*   `ENABLE_JWT_AUTH` (Domyślnie: `False`): Włączenie autoryzacji tokenami JWT.
-*   `ENABLE_RATE_LIMITING` (Domyślnie: `False`): Włączenie ograniczenia liczby zapytań API.
-*   `RATE_LIMIT_REQUESTS` (Domyślnie: `100` / `RATE_LIMIT_WINDOW: 60`): Domyślny limit (100 zapytań na minutę).
+### C. Zmienne Środowiskowe Pamięci (`apps/memory_api/config.py`):
+*   `RAE_REFLECTION_STRATEGY` (Wartość: `hybrid` lub `math`): `math` generuje refleksje czysto deterministyczne, `hybrid` wspiera generowanie "Lessons Learned" przez model LLM.
+*   `RAE_RERANKER_MODE` (Wartość: `math` lub `llm`): `math` używa algorytmu re-rankingu wagi poznawczej, `llm` używa modelu językowego.
+*   `POSTGRES_HOST`, `QDRANT_HOST`, `REDIS_URL`: Konfiguracja połączeń usług.
+*   `RAE_EMBEDDING_BACKEND` (Wartość: `onnx`): Zapewnia lokalne, bezwyjściowe generowanie embeddingów.
+*   `RAE_LLM_MODEL_DEFAULT` (Wartość: `ollama/qwen2.5:1.5b`): Model do syntezy.
 
 ### D. Wagi Poznawcze (Math V3 weights):
-Parametry do wyliczania rankingu wspomnień przez `rae-core/math/policy.py`:
-*   `MATH_V3_W1_RELEVANCE` (Wartość: `0.40`): Rezonans semantyczny (podobieństwo cosinusowe).
-*   `MATH_V3_W2_IMPORTANCE` (Wartość: `0.20`): Istotność poznawcza nadana przez trybunał.
-*   `MATH_V3_W3_RECENCY` (Wartość: `0.10`): Czasowy rozpad pamięci (świeżość).
-*   `MATH_V3_W4_CENTRALITY` (Wartość: `0.10`): Zagęszczenie relacji w grafie pojęć.
-*   `MATH_V3_W5_DIVERSITY` (Wartość: `0.10`): Współczynnik różnorodności (unikani duplikatów).
-*   `MATH_V3_W6_DENSITY` (Wartość: `0.10`): Zagęszczenie informacyjne w sąsiedztwie semantycznym.
-
-### E. Retencja, Rozpad i Konsolidacja (Decay & Summarization):
-*   `MEMORY_RETENTION_DAYS` (Domyślnie: `30` dni): Czas przechowywania wspomnień sensorycznych.
-*   `MEMORY_DECAY_RATE` (Domyślnie: `0.01`): Bazowy współczynnik zapominania wspomnień.
-*   `MEMORY_IMPORTANCE_DECAY_ENABLED` (Domyślnie: `True`): Rozpad istotności w czasie.
-*   `MEMORY_IMPORTANCE_DECAY_SCHEDULE` (Domyślnie: `"0 2 * * *"`): Harmonogram cron (codziennie o 02:00 w nocy).
-*   `REFLECTIVE_MEMORY_ENABLED` (Domyślnie: `True`): Włączenie pętli refleksyjnej.
-*   `REFLECTIVE_MEMORY_MODE` (Domyślnie: `full` / opcjonalnie `lite` dla słabych urządzeń).
-*   `DREAMING_ENABLED` (Domyślnie: `False` / `full` tryb nadpisuje na `True`): Włączenie asynchronicznych procesów konsolidacji marzeń sennych agenta (wyciąganie wniosków w tle).
-*   `DREAMING_MIN_IMPORTANCE` (Domyślnie: `0.6`): Minimalny próg istotności zdarzenia do konsolidacji.
-*   `SUMMARIZATION_ENABLED` (Domyślnie: `True`): Agregacja powtarzalnych mikrowydarzeń.
+*   `MATH_V3_W1_RELEVANCE` (`0.40`): Podobieństwo wektorowe.
+*   `MATH_V3_W2_IMPORTANCE` (`0.20`): Istotność nadana przez trybunał.
+*   `MATH_V3_W3_RECENCY` (`0.10`): Świeżość (czas od zapisu).
+*   `MATH_V3_W4_CENTRALITY` (`0.10`): Powiązanie w grafie.
+*   `MATH_V3_W5_DIVERSITY` (`0.10`): Eliminacja duplikatów semantycznych.
+*   `MATH_V3_W6_DENSITY` (`0.10`): Zagęszczenie informacyjne.
 
 ---
 
-## 3. Konfiguracja Planisty (RAE-Phoenix)
+## 3. Konfiguracja Planisty i Walidacji Jakości (RAE-Phoenix)
 
-Konfiguracja architektoniczna i weryfikacyjna w pliku `packages/rae-phoenix/feniks/config/settings.py`.
+Moduł Phoenix konfiguruje reguły refaktoryzacji oraz zatwierdzania proponowanych zmian.
 
-### A. Ustawienia Bazowe:
-*   `qdrant_collection` (Domyślnie: `feniks_kb_test`): Kolekcja wektorowa bazy wiedzy Phoenixa.
-*   `embedding_model` (Domyślnie: `all-MiniLM-L6-v2`): Model transformacji kodu na wektory.
-*   `rae_enabled` (Domyślnie: `False`): Flaga integracji z pamięcią RAE.
-*   `rae_timeout` (Domyślnie: `30` sekund): Maksymalny czas oczekiwania na odpowiedź z jądra RAE.
+### A. Strategie i Polityki Zatwierdzania Jakości (`feniks/core/policies/`):
+*   **ZeroRegressionPolicy (`behavior_zero_regression_enabled`):**
+    *   Wymusza twardy warunek: nowo wygenerowany kod nie może spowodować żadnej regresji w istniejących testach jednostkowych ani integracyjnych.
+*   **MaxBehaviorRiskPolicy (`behavior_max_risk_threshold`, domyślnie `0.5`):**
+    *   Wylicza stopień ryzyka zmiany (`risk_score`). Jeżeli ryzyko przekroczy próg (np. `0.5` dla standardowych zmian, `0.7` próg krytyczny), propozycja jest natychmiast blokowana.
+*   **MinimumCoverageBehaviorPolicy:**
+    *   Wymusza minimalną liczbę scenariuszy testowych (`behavior_min_coverage_scenarios` domyślnie `5`) i asercji w kodzie testowym (`behavior_min_coverage_checks` domyślnie `3`).
+*   **QualityPolicyEnforcer (`core/policies/quality_policy.py`):**
+    *   `min_thought_length` (Domyślnie `10` znaków): Odrzuca kroki wnioskowania agenta, jeśli jego proces myślowy ("thought") był zbyt krótki (wykrywanie powierzchownego planowania).
+    *   `forbidden_patterns` (Domyślnie: `["I don't know what to do", "just guessing"]`): Odrzuca i renegocjuje plany, jeśli model wyraża w nich niepewność lub brak determinizmu.
 
-### B. Polityki Ryzyka i Zabezpieczeń (Behavior Policy):
-*   `behavior_max_risk_threshold` (Domyślnie: `0.5`): Maksymalny akceptowalny wskaźnik ryzyka dla operacji (0.0 - 1.0).
-*   `behavior_critical_threshold` (Domyślnie: `0.7`): Próg krytyczny ryzyka (natychmiastowo kierowany do zatwierdzenia przez człowieka).
-*   `behavior_zero_regression_enabled` (Domyślnie: `False`): Flaga bezwzględnej blokady regresji testów.
-*   `behavior_min_coverage_scenarios` (Domyślnie: `5`): Wymagana liczba scenariuszy testowych przy generowaniu kontraktu behawioralnego.
-*   `behavior_contract_min_snapshots` (Domyślnie: `3`): Minimalna liczba wykonanych zrzutów stanu do wygenerowania stabilnego wzorca zachowania.
-*   `behavior_comparison_strict_mode` (Domyślnie: `False`): Tryb ścisłego porównywania plików i wyjść konsoli.
+### B. Kontrakt Zatwierdzania Poprawek (Phoenix-Quality Bridge):
+*   `PHOENIX_LLM_AGENT` (Domyślnie: `rae-oracle-gemini`): Model główny wykonujący refaktoryzację.
+*   **Warunek Akceptacji (Hard Contract):** Kod po refaktoryzacji jest akceptowany wyłącznie wtedy, gdy wynik audytu Quality Sentinel zwróci status `PASSED` **oraz** stopień zaawansowania kodu (`seniority_attained`) zostanie sklasyfikowany jako `advanced_senior` (wynik wyliczenia `SeniorityRanker` $\ge 0.90$). W innym wypadku Phoenix automatycznie podejmuje kolejną próbę (maks. `5` prób) lub wywołuje `FAILED_ESCALATED` z pełnym wycofaniem (rollback).
 
 ---
 
@@ -109,46 +93,22 @@ Konfiguracja architektoniczna i weryfikacyjna w pliku `packages/rae-phoenix/feni
 
 Konfiguracja współpracy agentów i uprawnień w `packages/rae-hive/config/hive_protocol.yaml`.
 
-### A. Konfiguracja Ogólna:
-*   `hive_id` (Wartość: `RAE-HIVE-ALPHA`): Identyfikator roju.
-*   `memory.api_url` (Domyślnie: `http://localhost:8001`): URL bazy wiedzy roju.
-*   `memory.project` (Domyślnie: `RAE-Hive`): Nazwa projektu dla logów telemetrycznych.
-
-### B. Przypisanie Modelowe (Model Router):
-*   `models.coder`: `deepseek-coder-v2:16b` (Model do pisania kodu).
-*   `models.reasoner`: `qwen2.5:14b` (Model do planowania).
-*   `models.fast_chat`: `llama3.1:8b` (Model do szybkich pogawędek/klasyfikacji).
-*   `models.embedding`: `nomic-embed-text` (Model embeddingów).
-
-### C. Role i Uprawnienia Agentów (Swarm Permissions):
-*   **Orchestrator:**
-    *   Model: `reasoner`
-    *   Uprawnienia: `["read_all", "write_tasks", "delegate"]`
-    *   Warstwa pamięci: `reflective`
-*   **Builder:**
-    *   Model: `coder`
-    *   Uprawnienia: `["read_semantic", "write_episodic", "file_system_write"]`
-    *   Warstwa pamięci: `working`
-*   **Auditor:**
-    *   Model: `reasoner`
-    *   Uprawnienia: `["read_episodic", "write_reflective", "file_system_read"]`
-    *   Warstwa pamięci: `episodic`
+*   `models.coder`: `deepseek-coder-v2:16b` (Pisanie kodu).
+*   `models.reasoner`: `qwen2.5:14b` (Rozumowanie i krytyka).
+*   **Uprawnienia ról (Permissions Matrix):**
+    *   `orchestrator` (Rola planująca): `["read_all", "write_tasks", "delegate"]`.
+    *   `builder` (Rola programistyczna): `["read_semantic", "write_episodic", "file_system_write"]`.
+    *   `auditor` (Rola weryfikująca): `["read_episodic", "write_reflective", "file_system_read"]`.
 
 ---
 
 ## 5. Konfiguracja Strażnika Jakości (RAE-Quality)
 
-Zmienne środowiskowe i progi zdefiniowane bezpośrednio w `packages/rae-quality/main.py` oraz `engines/governance/tribunal.py`.
+Parametry audytu kodu i testów w `packages/rae-quality/main.py`.
 
-### A. Zmienne Środowiskowe:
-*   `RAE_API_URL` (Domyślnie: `http://rae-memory:8000` lub `http://localhost:8000`): Endpoint API pamięci.
-*   `TRIBUNAL_TIER2_AGENT` (Domyślnie: `rae-local-reasoner`): Model apelacyjny w sądzie 3-stopniowym.
-*   `TRIBUNAL_TIER3_AGENT` (Domyślnie: `rae-oracle-gemini`): Model najwyższy (Sąd Najwyższy) analizujący ryzyko krytyczne.
-
-### B. Bramki Jakościowe (Quality Gate Baselines):
-*   `baseline_coverage` (Domyślnie: `80.0`%): Minimalne wymagane pokrycie testami jednostkowymi. Kod z mniejszym pokryciem jest automatycznie odrzucany.
-*   `baseline_vulnerabilities` (Domyślnie: `0`): Maksymalna dozwolona liczba krytycznych podatności bezpieczeństwa.
-*   Minimalny wynik Seniority (`SeniorityRanker`): `0.70`. Kod poniżej tej oceny (klasyfikowany jako `Junior Developer`) jest automatycznie odrzucany, co wymusza aktywną interwencję naprawczą Phoenixa.
+*   `baseline_coverage` (Domyślnie: `80.0`%): Minimalny akceptowalny próg pokrycia kodu testami.
+*   `baseline_vulnerabilities` (Domyślnie: `0`): Dopuszczalna liczba krytycznych błędów bezpieczeństwa (SAST/Trivy).
+*   `TestIntegrityGuard`: Wykrywa próby oszukiwania testów przez model (np. usuwanie asercji, mockowanie na poziomie krytycznym).
 
 ---
 
@@ -156,9 +116,8 @@ Zmienne środowiskowe i progi zdefiniowane bezpośrednio w `packages/rae-quality
 
 Parametry optymalizacyjne zdefiniowane w `packages/rae-lab/metrics_aggregator.py`.
 
-### A. Uczenie Ze Wzmocnieniem (MAB Tuner):
-Modyfikacja wag decyzji routingowych w oparciu o algorytm Multi-Armed Bandit:
-*   `alpha` (Wartość: `0.4`): Początkowa waga dla dokładności wykonania zadania.
-*   `beta` (Wartość: `0.3`): Początkowa waga dla minimalizacji opóźnień.
-*   `gamma` (Wartość: `0.3`): Początkowa waga dla oszczędności finansowych/tokenowych.
-*   `Granice wag` (Wartość: `[0.05, 0.85]`): Reguła zapobiegania nieskończonym pętlom decyzyjnym (Anti-Looping rule). Żadna z wag nie może spaść poniżej 5% ani przekroczyć 85% w procesie samouczenia.
+*   **Wagi Multi-Armed Bandit (MAB Tuner):**
+    *   `alpha` (Waga dokładności: `0.4`).
+    *   `beta` (Waga opóźnienia: `0.3`).
+    *   `gamma` (Waga kosztu tokenów: `0.3`).
+    *   `Granice optymalizacji`: `[0.05, 0.85]` (Zabezpieczenie przed dominacją jednej metryki i pętleniem wyboru modeli).
