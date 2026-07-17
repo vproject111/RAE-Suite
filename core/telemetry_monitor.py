@@ -65,27 +65,37 @@ class EmbeddingDriftDetector:
     def kolmogorov_smirnov_test(self, expected: List[float], actual: List[float]) -> float:
         """
         Computes the Kolmogorov-Smirnov (K-S) distance statistic between two samples.
+        Optimized to O(N log N) using a single-pass sorted traversal.
         """
         if not expected or not actual:
             return 0.0
             
-        # Compute CDFs
         sorted_exp = sorted(expected)
         sorted_act = sorted(actual)
+        n_exp, n_act = len(sorted_exp), len(sorted_act)
         
-        all_vals = sorted(list(set(expected + actual)))
-        
+        i_exp = i_act = 0
         max_distance = 0.0
         
-        for val in all_vals:
-            # Fraction of expected <= val
-            exp_cdf = sum(1 for x in sorted_exp if x <= val) / len(expected)
-            # Fraction of actual <= val
-            act_cdf = sum(1 for x in sorted_act if x <= val) / len(actual)
+        while i_exp < n_exp or i_act < n_act:
+            next_exp = sorted_exp[i_exp] if i_exp < n_exp else float('inf')
+            next_act = sorted_act[i_act] if i_act < n_act else float('inf')
+            current_val = min(next_exp, next_act)
             
-            distance = abs(exp_cdf - act_cdf)
-            max_distance = max(max_distance, distance)
+            # Fast-forward both lists for elements <= current_val
+            while i_exp < n_exp and sorted_exp[i_exp] <= current_val:
+                i_exp += 1
+            while i_act < n_act and sorted_act[i_act] <= current_val:
+                i_act += 1
             
+            # Compute CDFs at current value
+            cdf_exp = i_exp / n_exp
+            cdf_act = i_act / n_act
+            
+            distance = abs(cdf_exp - cdf_act)
+            if distance > max_distance:
+                max_distance = distance
+                
         return max_distance
 
     def check_drift(self, baseline_embeddings: List[List[float]], current_embeddings: List[List[float]]) -> Tuple[float, float, bool]:
