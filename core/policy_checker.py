@@ -23,12 +23,17 @@ class PolicyChecker:
 
     def evaluate_policy(self, risk_assessment: RiskAssessment) -> DecisionType:
         if risk_assessment.risk_class == RiskClass.R6:
+            logger.warning(f"Policy evaluation QUARANTINE due to R6 risk class for trace {risk_assessment.trace_id}")
             return DecisionType.QUARANTINE
-        elif risk_assessment.risk_class in [RiskClass.R4, RiskClass.R5]:
-            return DecisionType.NEEDS_APPROVAL
-        
+
+        # Compliance check denies non-compliant actions for R5, R4 or lower
         if not self.check_compliance(risk_assessment):
+            logger.warning(f"Policy evaluation DENIED due to compliance failure for trace {risk_assessment.trace_id}")
             return DecisionType.DENY
+
+        if risk_assessment.risk_class in [RiskClass.R4, RiskClass.R5]:
+            logger.info(f"Policy evaluation NEEDS_APPROVAL due to R4/R5 risk class for trace {risk_assessment.trace_id}")
+            return DecisionType.NEEDS_APPROVAL
             
         return DecisionType.ALLOW
 
