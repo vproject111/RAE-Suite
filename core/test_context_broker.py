@@ -28,7 +28,7 @@ def test_adaptive_retrieval_depth():
 
 
 def test_hierarchical_context_pruning():
-    broker = ContextBroker(token_limit=35) # Small token limit to force pruning
+    broker = ContextBroker(token_limit=45) # Small token limit to force pruning
     
     envelopes = [
         ContextEnvelope(
