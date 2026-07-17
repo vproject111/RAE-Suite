@@ -28,8 +28,9 @@ class BatchOptimizationEngine:
     Groups tasks to minimize Context Switch Cost (CSC) and maximize setup amortization.
     Enforces the Knowledge Scale Effect (Efekt Skali Wiedzy).
     """
-    def __init__(self):
+    def __init__(self, max_pending: int = 1000):
         self.pending_tasks: List[BatchTask] = []
+        self.max_pending = max_pending
         self.active_batches: Dict[str, Batch] = {}
         self.warm_agents: Dict[str, float] = {}  # module -> last_active_timestamp
         
@@ -39,6 +40,10 @@ class BatchOptimizationEngine:
         self.total_tasks_processed = 0
 
     def add_task(self, task: BatchTask):
+        if len(self.pending_tasks) >= self.max_pending:
+            raise RuntimeError(f"Batch queue overflow: reached maximum pending tasks capacity ({self.max_pending})")
+        if task.action_type not in ["refactor", "test", "lint", "analyse"]:
+            raise ValueError(f"Invalid task action type: {task.action_type}")
         self.pending_tasks.append(task)
         logger.info(f"batch_engine: Added task {task.task_id} for module {task.module}")
 
