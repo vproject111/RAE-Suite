@@ -21,49 +21,52 @@ class SandboxManager:
         """
         Creates a new Git Worktree for the given task.
         """
-        sandbox_id = f"sbx-{task_id}-{uuid.uuid4().hex[:6]}"
-        target_path = os.path.join(self.sandbox_root, sandbox_id)
+        safe_task_id = "".join([c for c in task_id if c.isalnum() or c in "-_"])
+        sandbox_id = f"sbx-{safe_task_id}-{uuid.uuid4().hex}"
+        target_path = os.path.abspath(os.path.join(self.sandbox_root, sandbox_id))
+        
+        # C6 Conformance: Prevent path traversal
+        if not target_path.startswith(os.path.abspath(self.sandbox_root)):
+            raise PermissionError("Fail-Closed Sandbox: Path traversal detected in sandbox creation.")
+            
         branch_name = f"agent/{sandbox_id}"
 
         logger.info("creating_worktree", task_id=task_id, path=target_path)
 
         try:
-            # Check if branch exists, if not create it
+            # Atomic worktree creation with new branch creation
             subprocess.run(
-                ["git", "branch", branch_name, base_branch],
+                ["git", "worktree", "add", "-b", branch_name, target_path, base_branch],
                 cwd=self.repo_root,
                 capture_output=True,
-                check=False # Might already exist
-            )
-
-            # Create worktree
-            subprocess.run(
-                ["git", "worktree", "add", target_path, branch_name],
-                cwd=self.repo_root,
-                capture_output=True,
+                text=True,
                 check=True
             )
             return target_path
         except subprocess.CalledProcessError as e:
-            err_msg = e.stderr.decode() if e.stderr else str(e)
-            logger.critical(f"worktree_creation_failed: {err_msg}")
+            err_msg = e.stderr.strip() if e.stderr else str(e)
+            logger.critical(f"worktree_creation_failed: {err_msg}", extra={"stdout": e.stdout})
             raise RuntimeError(f"Fail-Closed Sandbox: Worktree creation failed: {err_msg}")
 
     def create_container(self, task_id: str, image_digest: str) -> str:
         """
         Creates a secure Docker container for task execution.
-        Enforces digest verification, read-only rootfs, cap-drop, and no-new-privileges.
+        Enforces digest verification, read-only rootfs, tmpfs, cap-drop, non-root user, and no-new-privileges.
         """
         if "@sha256:" not in image_digest:
             raise ValueError("Security Violation: Docker image must be referenced by SHA-256 digest, not tag.")
             
-        container_name = f"rae-sbx-{task_id}-{uuid.uuid4().hex[:6]}"
+        safe_task_id = "".join([c for c in task_id if c.isalnum() or c in "-_"])
+        container_name = f"rae-sbx-{safe_task_id}-{uuid.uuid4().hex}"
         logger.info("creating_secure_container", container=container_name, digest=image_digest)
         
         cmd = [
             "docker", "run", "-d",
             "--name", container_name,
             "--read-only",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+            "--user", "1000:1000",
+            "--network", "none",
             "--cap-drop=ALL",
             "--security-opt", "no-new-privileges:true",
             image_digest,
@@ -75,7 +78,7 @@ class SandboxManager:
             return container_name
         except subprocess.CalledProcessError as e:
             err_msg = e.stderr.strip() if e.stderr else str(e)
-            logger.critical(f"container_creation_failed: {err_msg}")
+            logger.critical(f"container_creation_failed: {err_msg}", extra={"stdout": e.stdout})
             raise RuntimeError(f"Fail-Closed Sandbox: Docker container creation failed: {err_msg}")
 
     def cleanup_sandbox(self, sandbox_path: str):
