@@ -69,7 +69,7 @@ services:
       - "8009:8009"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
@@ -86,7 +86,7 @@ services:
       - "8011:8011"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/src:/app
+      - PYTHONPATH=/app/src/rae_lab:/app/src:/app
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
@@ -96,8 +96,8 @@ services:
 
   rae-quality:
     build:
-      context: .
-      dockerfile: ./packages/rae-quality/Dockerfile
+      context: ./packages/rae-quality
+      dockerfile: Dockerfile
     restart: always
     ports:
       - "8010:8010"
@@ -168,6 +168,7 @@ services:
       - RAE_PROJECT_NAME=dreamsoft_factory
       - NODE_ENV=production
       - HOME=/home/node
+      - OPENCLAW_GATEWAY_TOKEN=secure_gateway_token_123
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     volumes:
@@ -194,6 +195,21 @@ services:
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - rae-memory
+    networks:
+      - rae-internal
+
+  rae-portal:
+    build:
+      context: ./packages/rae-agentic-memory/rae-portal
+      dockerfile: Dockerfile
+    container_name: rae-portal
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - RAE_API_URL=http://rae-memory:8000
     depends_on:
       - rae-memory
     networks:

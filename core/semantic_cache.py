@@ -1,6 +1,7 @@
 import time
 import random
 import logging
+import threading
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -20,9 +21,11 @@ class ProbabilisticSemanticCache:
     Limits caches to volatile semantic cache only, with absolutely no DB mutations.
     Enforces Semantic Neighborhood Eviction on mismatch detection.
     """
-    def __init__(self, validation_probability: float = 0.05):
+    def __init__(self, validation_probability: float = 0.05, max_ttl: float = 86400.0):
         self.cache: Dict[str, SemanticCacheEntry] = {}
         self.validation_probability = validation_probability
+        self.max_ttl = max_ttl
+        self.lock = threading.RLock()
 
     def _cosine_similarity(self, v1: List[float], v2: List[float]) -> float:
         if not v1 or not v2 or len(v1) != len(v2):
@@ -34,6 +37,13 @@ class ProbabilisticSemanticCache:
             return 0.0
         return dot_product / (magnitude_v1 * magnitude_v2)
 
+    def _purge_expired(self, now: float):
+        """Purges expired cache entries to prevent memory leaks."""
+        expired_keys = [k for k, entry in self.cache.items() if now > entry.created_at + entry.ttl]
+        for k in expired_keys:
+            del self.cache[k]
+            logger.info(f"probabilistic_cache: Purged expired key '{k}'")
+
     def get(self, query: str, query_embedding: List[float]) -> Optional[str]:
         """
         Retrieves matching cached result or None.
@@ -41,45 +51,45 @@ class ProbabilisticSemanticCache:
         """
         now = time.time()
         
-        # 1. Exact or semantic lookup
-        best_match_key = None
-        best_match_entry = None
-        best_sim = 0.0
-        
-        for k, entry in self.cache.items():
-            # Check expiration
-            if now > entry.created_at + entry.ttl:
-                continue
-                
-            sim = self._cosine_similarity(query_embedding, entry.embedding)
-            if sim > 0.95 and sim > best_sim:
-                best_sim = sim
-                best_match_key = k
-                best_match_entry = entry
+        with self.lock:
+            # Clean up expired items
+            self._purge_expired(now)
+            
+            # 1. Exact or semantic lookup
+            best_match_key = None
+            best_match_entry = None
+            best_sim = 0.0
+            
+            for k, entry in self.cache.items():
+                sim = self._cosine_similarity(query_embedding, entry.embedding)
+                if sim > 0.95 and sim > best_sim:
+                    best_sim = sim
+                    best_match_key = k
+                    best_match_entry = entry
 
-        if not best_match_entry:
-            return None
-
-        # 2. Probabilistic Invalidation Check
-        if random.random() < self.validation_probability:
-            logger.info(f"probabilistic_cache: Triggered random validation check (p={self.validation_probability}) for query: '{query}'")
-            # Simulate validating with actual source (e.g. if the cached answer is still correct)
-            # In our system, if it fails validation, we evict the neighborhood
-            is_valid = self._mock_validate_source(query, best_match_entry.response)
-            if not is_valid:
-                logger.warning(f"probabilistic_cache: Validation mismatch detected! Evicting semantic neighborhood of '{query}'")
-                self._evict_neighborhood(query_embedding)
+            if not best_match_entry:
                 return None
 
-        logger.info(f"probabilistic_cache: Cache hit (similarity={best_sim:.3f}) for query: '{query}'")
-        return best_match_entry.response
+            # 2. Probabilistic Invalidation Check
+            if random.random() < self.validation_probability:
+                logger.info(f"probabilistic_cache: Triggered random validation check (p={self.validation_probability}) for query: '{query}'")
+                is_valid = self._mock_validate_source(query, best_match_entry.response)
+                if not is_valid:
+                    logger.warning(f"probabilistic_cache: Validation mismatch detected! Evicting semantic neighborhood of '{query}'")
+                    self._evict_neighborhood(query_embedding)
+                    return None
+
+            logger.info(f"probabilistic_cache: Cache hit (similarity={best_sim:.3f}) for query: '{query}'")
+            return best_match_entry.response
 
     def set(self, query: str, response: str, volatility_score: float, embedding: List[float]):
         """
-        Caches a response. TTL is dynamically scaled by 1 / volatility_score.
+        Caches a response. TTL is dynamically scaled by 1 / volatility_score, capped at max_ttl.
         """
-        # Base TTL of 3600 seconds, scaled down by volatility
-        ttl = max(60.0, 3600.0 / max(0.1, volatility_score))
+        now = time.time()
+        # Base TTL of 3600 seconds, scaled down by volatility, capped at max_ttl
+        calculated_ttl = max(60.0, 3600.0 / max(0.1, volatility_score))
+        ttl = min(calculated_ttl, self.max_ttl)
         
         entry = SemanticCacheEntry(
             query=query,
@@ -88,11 +98,13 @@ class ProbabilisticSemanticCache:
             ttl=ttl,
             embedding=embedding
         )
-        self.cache[query] = entry
-        logger.info(f"probabilistic_cache: Cached query '{query}' (TTL={ttl:.1f}s, Volatility={volatility_score:.2f})")
+        
+        with self.lock:
+            self._purge_expired(now)
+            self.cache[query] = entry
+            logger.info(f"probabilistic_cache: Cached query '{query}' (TTL={ttl:.1f}s, Volatility={volatility_score:.2f})")
 
     def _mock_validate_source(self, query: str, cached_response: str) -> bool:
-        # In mock validation, say 90% chance it is valid, but fails if query contains "deprecated"
         if "deprecated" in query.lower():
             return False
         return True
@@ -101,12 +113,13 @@ class ProbabilisticSemanticCache:
         """
         Evicts all cached items with cosine similarity > threshold.
         """
-        keys_to_evict = []
-        for k, entry in self.cache.items():
-            sim = self._cosine_similarity(target_embedding, entry.embedding)
-            if sim > threshold:
-                keys_to_evict.append(k)
-                
-        for k in keys_to_evict:
-            del self.cache[k]
-            logger.info(f"probabilistic_cache: Evicted semantic neighborhood key '{k}'")
+        with self.lock:
+            keys_to_evict = []
+            for k, entry in self.cache.items():
+                sim = self._cosine_similarity(target_embedding, entry.embedding)
+                if sim > threshold:
+                    keys_to_evict.append(k)
+                    
+            for k in keys_to_evict:
+                del self.cache[k]
+                logger.info(f"probabilistic_cache: Evicted semantic neighborhood key '{k}'")

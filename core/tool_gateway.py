@@ -66,32 +66,50 @@ class ToolGateway:
         Executes a command inside the gateway.
         Implements Empty Run Prevention and Trajectory Replay registration.
         """
+        if not command:
+            raise ValueError("Command cannot be empty")
+
+        # C6 Conformance: Ensure working directory is strictly within the workspace
+        abs_cwd = os.path.abspath(cwd)
+        if not abs_cwd.startswith(self.workspace_root):
+            raise PermissionError(f"Tool Execution Gateway: Working directory escapes workspace: {cwd}")
+
         cmd_str = " ".join(command)
         # Compute hashes
         context_hash = hashlib.sha256((context_str or cmd_str).encode('utf-8')).hexdigest()
         input_hash = hashlib.sha256(cmd_str.encode('utf-8')).hexdigest()
-        cwd_hash = hashlib.sha256(cwd.encode('utf-8')).hexdigest()
 
         # 1. Empty Run Prevention
         if is_analysis and context_hash in self.empty_run_cache:
-            logger.info(f"empty_run_prevented: context_hash={context_hash}")
+            logger.info("empty_run_prevented", context_hash=context_hash)
             cached = self.empty_run_cache[context_hash]
             return cached["exit_code"], cached["stdout"], cached["stderr"]
 
         # 2. Block destructive commands (failsafe Policy check)
-        cmd_lower = cmd_str.lower()
-        if any(bad in cmd_lower for bad in ["rm -rf /", "drop table", "truncate table", "drop database"]):
-            raise PermissionError("Tool Execution Gateway: Destructive command blocked by policy engine.")
+        executable = os.path.basename(command[0]).lower()
+        if executable in ["rm", "sudo", "su", "sh", "bash", "zsh", "dropdb", "createdb"]:
+            if executable == "rm":
+                args_str = " ".join(command[1:])
+                if "/" in command[1:] or "-rf" in args_str:
+                    raise PermissionError("Tool Execution Gateway: Dangerous rm command blocked.")
+            else:
+                raise PermissionError(f"Tool Execution Gateway: Elevation/Shell tool '{executable}' blocked by policy.")
 
-        # 3. Execution
+        cmd_lower = cmd_str.lower()
+        if any(bad in cmd_lower for bad in ["drop table", "truncate table", "drop database"]):
+            raise PermissionError("Tool Execution Gateway: Database destructive command blocked.")
+
+        # 3. Execution with process groups for clean termination
         start_time = time.time()
         try:
+            # preexec_fn=os.setsid is not portable on Windows, but since OS is Linux, we use it or pass start_new_session=True in Python 3.2+
             proc = subprocess.run(
                 command,
-                cwd=cwd,
+                cwd=abs_cwd,
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
+                start_new_session=True
             )
             exit_code = proc.returncode
             stdout = proc.stdout
@@ -105,31 +123,26 @@ class ToolGateway:
             stdout = ""
             stderr = f"Command execution failed: {e}"
 
-        duration_ms = (time.time() - start_time) * 1000
-
-        # Compute output hashes
         stdout_hash = hashlib.sha256(stdout.encode('utf-8')).hexdigest()
         stderr_hash = hashlib.sha256(stderr.encode('utf-8')).hexdigest()
 
-        # Save raw outputs to output dir
         raw_out_filename = f"out_{trace_id}_{step_id}.txt"
         raw_out_path = os.path.join(self.output_dir, raw_out_filename)
         try:
             with open(raw_out_path, "w") as f:
                 f.write(f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}")
-            raw_output_uri = f"file://{raw_out_path}"
+            # C6 Conformance: Store only workspace-relative URIs
+            rel_path = os.path.relpath(raw_out_path, self.workspace_root)
+            raw_output_uri = f"workspace://{rel_path}"
         except Exception:
             raw_output_uri = "n/a"
 
-        # 4. Check if this was an empty run (e.g. linter with no errors, or analyser saying 'no change required')
         is_empty_run = False
         if is_analysis:
-            # Analyze outputs to determine if "no changes/no violations/success" was returned
             stdout_lower = stdout.lower()
             if any(ok in stdout_lower for ok in ["no changes", "no violations", "0 errors", "passed", "everything clean"]):
                 is_empty_run = True
 
-        # Log to replay file
         replay_entry = {
             "trace_id": trace_id,
             "step_id": step_id,
@@ -150,8 +163,11 @@ class ToolGateway:
         }
         self._save_trajectory_entry(replay_entry)
 
-        # Cache if empty run
+        # Cache with eviction to prevent OOM
         if is_empty_run:
+            if len(self.empty_run_cache) >= 1000:
+                first_key = next(iter(self.empty_run_cache))
+                self.empty_run_cache.pop(first_key, None)
             self.empty_run_cache[context_hash] = replay_entry["result"]
 
         return exit_code, stdout, stderr

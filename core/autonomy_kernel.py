@@ -229,8 +229,21 @@ class AutonomyKernel:
         execution_status = ExecutionStatus.SUCCESS
         agent = payload.get("target_agent", "")
 
+        # Check if batch execution payload is present
+        if "tasks" in payload:
+            logger.info(f"kernel_processing_batch: batch_id={payload.get('batch_id')}, count={len(payload['tasks'])}")
+            
+            results = []
+            for t_data in payload["tasks"]:
+                step_res = await self._execute_single_batch_task(t_data, sandbox_path)
+                results.append(step_res)
+                if step_res["status"] == "FAILED":
+                    execution_status = ExecutionStatus.FAILED
+            
+            payload["batch_results"] = results
+
         # 1. OpenClaw Escalation for high risk or explicit target
-        if agent == "rae-openclaw" or risk_assessment.risk_class >= RiskClass.R3:
+        elif agent == "rae-openclaw" or risk_assessment.risk_class >= RiskClass.R3:
             import subprocess
             import os
             logger.info(f"escalating_to_openclaw: trace_id={trace_id}, task_id={task_id}")
@@ -584,4 +597,52 @@ class AutonomyKernel:
         )
         logger.info(f"handoff_envelope_created: handoff_id={handoff.handoff_id}, target={target}")
         return handoff
+
+
+    async def _execute_single_batch_task(self, task_data: Dict[str, Any], sandbox_path: Optional[str]) -> Dict[str, Any]:
+        """
+        Executes a single task in a batch using the provided sandbox path.
+        """
+        task_id = task_data.get("task_id", "unknown")
+        file = task_data.get("file", "")
+        action = task_data.get("action", "")
+        logger.info(f"kernel_executing_batch_task: id={task_id}, file={file}, action={action}")
+        
+        status = "SUCCESS"
+        error_msg = ""
+        
+        # Simulate execution based on action
+        if action == "refactor":
+            res = await self.phoenix.run_repair_loop(f"trace-{task_id}", "Error: batch refactor requested", file)
+            if res["status"] != "SUCCESS":
+                status = "FAILED"
+                error_msg = "Phoenix repair failed."
+        elif action == "test":
+            exit_code, stdout, stderr = self.tool_gateway.execute_tool(
+                trace_id=f"trace-{task_id}",
+                command=["pytest", file] if file else ["pytest"],
+                cwd=sandbox_path or ".",
+                risk_class=RiskClass.R1
+            )
+            if exit_code != 0:
+                status = "FAILED"
+                error_msg = f"Test execution failed: {stderr or stdout}"
+        else:
+            exit_code, stdout, stderr = self.tool_gateway.execute_tool(
+                trace_id=f"trace-{task_id}",
+                command=["linter", file] if file else ["linter"],
+                cwd=sandbox_path or ".",
+                risk_class=RiskClass.R0
+            )
+            if exit_code != 0:
+                status = "FAILED"
+                error_msg = f"Lint/Static analysis failed: {stderr or stdout}"
+                
+        return {
+            "task_id": task_id,
+            "file": file,
+            "action": action,
+            "status": status,
+            "error": error_msg
+        }
 

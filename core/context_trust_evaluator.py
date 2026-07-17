@@ -11,20 +11,35 @@ class ContextTrustEvaluator:
     """
     def __init__(self):
         import os
-        self.reject_threshold = float(os.getenv("RAE_CONTEXT_REJECT_THRESHOLD", "0.4"))
-        self.advisory_threshold = float(os.getenv("RAE_CONTEXT_ADVISORY_THRESHOLD", "0.7"))
+        try:
+            self.reject_threshold = float(os.getenv("RAE_CONTEXT_REJECT_THRESHOLD", "0.4"))
+        except ValueError:
+            logger.error("Invalid RAE_CONTEXT_REJECT_THRESHOLD env value; fallback to 0.4")
+            self.reject_threshold = 0.4
 
+        try:
+            self.advisory_threshold = float(os.getenv("RAE_CONTEXT_ADVISORY_THRESHOLD", "0.7"))
+        except ValueError:
+            logger.error("Invalid RAE_CONTEXT_ADVISORY_THRESHOLD env value; fallback to 0.7")
+            self.advisory_threshold = 0.7
 
     def evaluate_trust(self, memory_metadata: Dict[str, Any]) -> Tuple[float, str]:
         """
         Calculates a trust score (0.0-1.0) based on source, success rate, and risk links.
         Returns: (trust_score, classification)
         """
+        # Strict Isolation of RESTRICTED data (Phase 3 Enforcement Contract)
+        # Check this first so it bypasses quarantine and other factors completely
+        info_class = memory_metadata.get("information_class", "internal").lower()
+        layer = memory_metadata.get("layer", "episodic")
+        if info_class == "restricted" and layer != "working":
+            logger.warning("RESTRICTED data isolation violation: rejected due to layer placement.")
+            return 0.0, "REJECTED"
+
         # Base score
         score = 0.5
         
         # 1. Source Layer Weighting
-        layer = memory_metadata.get("layer", "episodic")
         if layer == "semantic": score += 0.2 # Verified facts
         elif layer == "reflective": score += 0.1 # Lessons learned
         elif layer == "working": score -= 0.1 # Volatile context
@@ -43,12 +58,6 @@ class ContextTrustEvaluator:
         if is_quarantined:
             score = 0.5
             
-        # Strict Isolation of RESTRICTED data (Phase 3 Enforcement Contract)
-        info_class = memory_metadata.get("information_class", "internal").lower()
-        if info_class == "restricted" and layer != "working":
-            # RESTRICTED data can only exist in the Working layer. Reject if found elsewhere.
-            score = 0.0
-            
         # Clamp score
         score = max(0.0, min(1.0, score))
         
@@ -62,7 +71,7 @@ class ContextTrustEvaluator:
         else:
             classification = "REJECTED"
             
-        logger.info("context_trust_evaluated", score=score, classification=classification)
+        logger.info(f"Context trust evaluated: score={score:.2f}, classification={classification}")
         return score, classification
 
     def filter_context(self, memories: List[Dict[str, Any]]) -> List[ContextEnvelope]:

@@ -8,11 +8,19 @@ class WorkflowRegistry:
     """
     Registry for managing and retrieving WorkflowDefinitions in RAE-Suite.
     """
-    def __init__(self):
+    def __init__(self, max_workflows: int = 500):
         self._workflows: Dict[str, WorkflowDefinition] = {}
+        self.max_workflows = max_workflows
         self._load_default_workflows()
 
     def register(self, workflow: WorkflowDefinition):
+        if not workflow.workflow_id:
+            raise ValueError("Workflow registration failed: workflow_id is empty.")
+        if workflow.workflow_id in self._workflows:
+            raise ValueError(f"Workflow registration failed: workflow_id '{workflow.workflow_id}' is already registered (collision blocked).")
+        if len(self._workflows) >= self.max_workflows:
+            raise RuntimeError(f"Workflow registration failed: maximum capacity ({self.max_workflows}) reached.")
+            
         self._workflows[workflow.workflow_id] = workflow
         logger.info(f"Registered workflow: {workflow.workflow_id} (version: {workflow.version})")
 

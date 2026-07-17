@@ -67,6 +67,21 @@ services:
       - rae-internal
     command: uvicorn apps.memory_api.main:app --host 0.0.0.0 --port 8000 --reload
 
+  rae-portal:
+    build:
+      context: ./packages/rae-agentic-memory/rae-portal
+      dockerfile: Dockerfile
+    container_name: rae-portal
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - RAE_API_URL=http://rae-memory:8000
+    depends_on:
+      - rae-memory
+    networks:
+      - rae-internal
+
   # Disable conflicting standalone API from the included memory dev profile
   rae-api-dev:
     scale: 0
