@@ -4,6 +4,20 @@ This document outlines the step-by-step rollout of **Hard Frames Mode** across t
 
 ---
 
+## ⚙️ Dual-Execution Modes (Tryby Uruchomienia)
+
+The system supports two modes of execution, toggled dynamically via the `RAE_AUTONOMY_MODE` environment variable:
+
+1. **Ordinary Mode (`RAE_AUTONOMY_MODE=ordinary`)**:
+   - **Behavior**: The runtime tracks and journals the Sequence of Autonomy state transitions for auditing purposes, but does **not** block execution or throw exceptions when states are skipped or tools are called out of order.
+   - **Usage**: Recommended for local development, rapid prototyping, and exploratory tasks.
+
+2. **Hard Frames Mode (`RAE_AUTONOMY_MODE=hard`)**:
+   - **Behavior**: Absolute enforcement of the Sequence of Autonomy. Any invalid transition (e.g. attempting actions before capability clearance) or security policy violation (e.g. restricted data leakage) throws a `ContractViolationError` and aborts immediately.
+   - **Usage**: Mandatory for production, CI/CD pipelines, and high-concurrency environments.
+
+---
+
 ## 📅 Rollout Phases
 
 ### 🏁 Phase 1: RAE-Core Hard Gating (Completed)
