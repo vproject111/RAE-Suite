@@ -62,11 +62,16 @@ def run_replay(args):
     for i, step in enumerate(trace_steps):
         cmd = step.get("command", [])
         print(f"\nReplaying Step {i+1}: {' '.join(cmd)}")
+        rc_str = step.get("risk_class", "R0")
+        try:
+            rc = RiskClass[rc_str]
+        except KeyError:
+            rc = RiskClass.R0
         exit_code, stdout, stderr = gateway.execute_tool(
             trace_id=trace_id,
             command=cmd,
             cwd=".",
-            risk_class=RiskClass.R0
+            risk_class=rc
         )
         print(f"Exit Code: {exit_code}")
         if stdout:
@@ -96,7 +101,15 @@ def run_fork(args):
         step = trace_steps[i]
         cmd = step.get("command", [])
         print(f"  Running setup step {i+1}: {' '.join(cmd)}")
-        gateway.execute_tool(trace_id=trace_id, command=cmd, cwd=".", risk_class=RiskClass.R0)
+        rc_str = step.get("risk_class", "R0")
+        try:
+            rc = RiskClass[rc_str]
+        except KeyError:
+            rc = RiskClass.R0
+        exit_code, _, stderr = gateway.execute_tool(trace_id=trace_id, command=cmd, cwd=".", risk_class=rc)
+        if exit_code != 0:
+            print(f"Error: Setup step {i+1} failed with exit code {exit_code}. Aborting fork. STDERR:\n{stderr}")
+            sys.exit(1)
         
     # Fork point reached
     forked_step = trace_steps[step_num - 1]
