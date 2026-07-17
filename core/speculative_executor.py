@@ -18,19 +18,36 @@ class SpeculativeToolExecutor:
     def _is_command_safe(self, command: List[str]) -> bool:
         """
         Only allows idempotent or read-only commands for speculative execution.
+        Prevents injection by ensuring arguments do not contain shell metacharacters.
         """
         if not command:
             return False
             
+        # Prevent shell metacharacters in any argument
+        illegal_chars = [";", "&&", "||", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+        for arg in command:
+            if any(char in arg for char in illegal_chars):
+                logger.warning(f"speculative_executor: Blocked command containing forbidden characters: {command}")
+                return False
+                
         cmd_name = command[0].lower()
         # Allowlist of safe, read-only utilities
         if cmd_name == "git":
-            return any(arg in command[1:] for arg in ["status", "diff", "log", "branch", "show"])
+            # Only allow specific safe subcommands without arbitrary flags
+            allowed_git_args = {"status", "diff", "log", "branch", "show"}
+            return len(command) > 1 and command[1] in allowed_git_args
         elif cmd_name == "docker":
-            return any(arg in command[1:] for arg in ["ps", "logs", "images", "stats"])
+            # Only allow specific safe subcommands
+            allowed_docker_args = {"ps", "logs", "images", "stats"}
+            return len(command) > 1 and command[1] in allowed_docker_args
         elif cmd_name == "python3":
-            # Diagnostic scripts
-            return any("validate" in arg or "test" in arg for arg in command[1:])
+            # Only allow specific diagnostic scripts
+            allowed_scripts = {
+                "scripts/validate_git_flow.py",
+                "scripts/validate_repo_manifest.py",
+                "scripts/connect_cluster.py"
+            }
+            return len(command) > 1 and command[1] in allowed_scripts
             
         return False
 
