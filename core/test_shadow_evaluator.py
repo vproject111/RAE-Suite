@@ -20,7 +20,16 @@ def test_shadow_evaluator_failure_mining_and_promotion():
     assert not promoted
     assert evaluator.candidate_guardrails[g_id].is_shadow
     
-    # Promote -> Should succeed if age >= 72 hours and no false positives
+    # 4. Record false positive -> Should increment count
+    evaluator.record_false_positive(g_id)
+    assert evaluator.candidate_guardrails[g_id].false_positives == 1
+    
+    # Promote -> Should fail now because FP rate is 1/1 = 1.0 >= 0.001
+    promoted = evaluator.promote_guardrail(g_id, age_hours=75.0)
+    assert not promoted
+    
+    # Reset false positives to test successful promotion
+    evaluator.candidate_guardrails[g_id].false_positives = 0
     promoted = evaluator.promote_guardrail(g_id, age_hours=75.0)
     assert promoted
     assert not evaluator.candidate_guardrails[g_id].is_shadow
