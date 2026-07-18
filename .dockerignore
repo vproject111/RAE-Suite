@@ -8,4 +8,4 @@ dist
 build
 *.log
 .openclaw_config/
-node_modules/
+packages/rae-agentic-memory/data/

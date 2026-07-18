@@ -69,7 +69,7 @@ services:
       - "8009:8009"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
@@ -100,10 +100,15 @@ services:
       dockerfile: ./packages/rae-quality/Dockerfile
     restart: always
     ports:
-      - "8010:8010"
+      - "8010:8000"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app
+      - RAE_LLM_MODE=local
+      - OLLAMA_API_URL=http://172.19.0.1:11434
+      - SONARQUBE_URL=${SONARQUBE_URL:-http://sonarqube:9000}
+      - SONARQUBE_TOKEN=${SONARQUBE_TOKEN}
+      - SONARQUBE_WEBHOOK_SECRET=${SONARQUBE_WEBHOOK_SECRET:-sonarqube_webhook_secret_key}
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
@@ -118,10 +123,12 @@ services:
       dockerfile: ./packages/rae-phoenix/Dockerfile
     restart: always
     ports:
-      - "8012:8012"
+      - "8012:8000"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app
+      - RAE_LLM_MODE=local
+      - OLLAMA_API_URL=http://172.19.0.1:11434
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
@@ -136,10 +143,10 @@ services:
       dockerfile: ./packages/rae-hive/Dockerfile
     restart: always
     ports:
-      - "8013:8013"
+      - "8013:8000"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
@@ -169,6 +176,7 @@ services:
       - NODE_ENV=production
       - HOME=/home/node
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENCLAW_GATEWAY_TOKEN=noauth
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     volumes:
       # Hard Frames: Code remains internal to the image
@@ -190,7 +198,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
       - RAE_MCP_SSE=1
       - RAE_MCP_PORT=8005
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
       - /var/run/docker.sock:/var/run/docker.sock
@@ -198,6 +206,24 @@ services:
       - rae-memory
     networks:
       - rae-internal
+
+  sonarqube:
+    image: sonarqube:community
+    restart: always
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_JDBC_USERNAME=rae
+      - SONAR_JDBC_PASSWORD=rae_password
+      - SONAR_JDBC_URL=jdbc:postgresql://rae-am-postgres:5432/sonar
+    depends_on:
+      - rae-am-postgres
+    networks:
+      - rae-internal
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
 # Local folder bindings used, named volumes block removed
 
