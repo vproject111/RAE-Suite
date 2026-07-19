@@ -210,6 +210,8 @@ services:
       - "8080:8080"
     environment:
       - RAE_API_URL=http://rae-memory:8000
+    volumes:
+      - ./packages/rae-agentic-memory/rae-portal:/app
     depends_on:
       - rae-memory
     networks:
