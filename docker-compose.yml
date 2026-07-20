@@ -100,7 +100,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     ports:
-      - "8010:8010"
+      - "8010:8000"
     environment:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
@@ -118,7 +118,7 @@ services:
       dockerfile: ./packages/rae-phoenix/Dockerfile
     restart: always
     ports:
-      - "8012:8012"
+      - "8012:8000"
     environment:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
@@ -136,7 +136,7 @@ services:
       dockerfile: ./packages/rae-hive/Dockerfile
     restart: always
     ports:
-      - "8013:8013"
+      - "8013:8000"
     environment:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
@@ -207,7 +207,7 @@ services:
     container_name: rae-portal
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8082:8080"
     environment:
       - RAE_API_URL=http://rae-memory:8000
     volumes:
@@ -216,6 +216,24 @@ services:
       - rae-memory
     networks:
       - rae-internal
+
+  sonarqube:
+    image: sonarqube:community
+    restart: always
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_JDBC_USERNAME=rae
+      - SONAR_JDBC_PASSWORD=rae_password
+      - SONAR_JDBC_URL=jdbc:postgresql://rae-am-postgres:5432/sonar
+    depends_on:
+      - rae-am-postgres
+    networks:
+      - rae-internal
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
 # Local folder bindings used, named volumes block removed
 
