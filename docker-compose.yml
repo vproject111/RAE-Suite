@@ -70,6 +70,8 @@ services:
     environment:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app/src:/app
+      - RAE_PLANNING_FLOW=${RAE_PLANNING_FLOW:-tot_mcts}
+      - RAE_CODING_FLOW=${RAE_CODING_FLOW:-standard}
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
