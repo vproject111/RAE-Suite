@@ -114,8 +114,8 @@ services:
 
   rae-phoenix:
     build:
-      context: ./packages/rae-phoenix
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./packages/rae-phoenix/Dockerfile
     restart: always
     ports:
       - "8012:8000"
