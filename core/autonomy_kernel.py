@@ -108,6 +108,16 @@ class AutonomyKernel:
         # --- Enforce Context Trust-Score Evaluation ---
         if "historical_context" in payload:
             raw_context = payload["historical_context"]
+            # V-02 threat control: ensure no cross-tenant context leakage before filtering.
+            if raw_context is None:
+                raise FatalEnterpriseError("V-02 threat detected: raw_context is None; an explicit (possibly empty) context list is required.")
+            for idx, ctx_item in enumerate(raw_context):
+                ctx_tenant_id = getattr(ctx_item, "tenant_id", None)
+                if ctx_tenant_id is None or ctx_tenant_id != self.tenant_id:
+                    raise FatalEnterpriseError(
+                        f"V-02 threat detected: tenant_id mismatch in context item "
+                        f"{getattr(ctx_item, 'id', f'index-{idx}')} (expected {self.tenant_id}, got {ctx_tenant_id})."
+                    )
             filtered_context = self.trust_evaluator.filter_context(raw_context)
             # Serialize to dict to prevent JSON formatting errors
             payload["historical_context"] = [
@@ -183,6 +193,11 @@ class AutonomyKernel:
             )
             
         transition(TaskState.CAPABILITY_CHECKED, f"Agent {agent_id} capabilities verified against {contract.contract_id}.")
+        if policy_decision == DecisionType.ALLOW:
+            transition(TaskState.APPROVED, f"Policy decision ALLOW for agent {agent_id}; task approved for execution against {contract.contract_id}.")
+        else:
+            transition(TaskState.REJECTED, f"Policy decision {policy_decision} for agent {agent_id}; task rejected against {contract.contract_id}.")
+            raise FatalEnterpriseError(f"Policy decision {policy_decision} is not ALLOW for agent {agent_id}; halting task against {contract.contract_id}.")
 
 
         # 5. PLANNED
@@ -208,6 +223,27 @@ class AutonomyKernel:
                 transition(TaskState.DRY_RUN, "Simulation successful.")
         
         # 7. SANDBOX_EXECUTING
+        # V-01 threat control: validate jwt_token signature/expiration and hash-claim binding before sandbox execution.
+        from hmac import compare_digest
+        jwt_token = payload.get("jwt_token")
+        if jwt_token:
+            try:
+                # Verifies the token signature and standard time-based claims (exp/nbf); rejects forged or expired tokens.
+                claims = jwt.decode(jwt_token, self.jwt_signing_key, algorithms=["RS256"])
+            except JWTError as e:
+                raise FatalEnterpriseError(f"V-01 threat detected: jwt_token validation failed: {e}")
+
+            if "exp" not in claims:
+                raise FatalEnterpriseError("V-01 threat detected: jwt_token is missing the required 'exp' claim.")
+
+            hash_claim = "plan_hash" if payload.get("plan_hash") else "diff_hash"
+            expected_hash = payload.get(hash_claim)
+            token_hash = claims.get(hash_claim)
+            if not expected_hash or not token_hash or not compare_digest(str(token_hash), str(expected_hash)):
+                raise FatalEnterpriseError(
+                    f"V-01 threat detected: jwt_token '{hash_claim}' claim does not match execution payload."
+                )
+        
         transition(TaskState.SANDBOX_EXECUTING, f"Executing {intent} in isolated environment.")
         
         # --- Enforce Sandbox Isolation for Risk > R1 ---
