@@ -192,10 +192,10 @@ W pliku `packages/rae-agentic-memory/apps/memory_api/middleware/telemetry_bridge
 
 ## 4. KRYTERIA AKCEPTACJI PLANU POPRAWY (DEFINITION OF DONE)
 
-- [ ] **REST API**: Punkt końcowy `POST /v2/search/evidence` zwraca w pełni zwalidowany `EvidencePackage` dla klientów zewnętrznych.
-- [ ] **Wzbogacanie Ingestii**: Zapis pamięci kodu źródłowego przez REST API automatycznie tworzy poprawny `ContextEnvelope` z atrybucją AST.
-- [ ] **Wielomodalność i GraphRAG w `RAEEngine`**: Zapytania kierowane do fasady silnika mogą bezpośrednio korzystać ze strategii `graph_lite` i `visual`.
-- [ ] **Autonomia Refleksji**: Społeczności grafu wiedzy są automatycznie syntezowane do warstwy `reflective` przez zadanie w tle.
-- [ ] **Zero Regresji**: 100% testów przechodzi pomyślnie (`make test-core` i testy API).
-- [ ] **Zero Warning Policy**: Ruff, Black, isort oraz Mypy w 100% czyste bez żadnych ostrzeżeń.
-- [ ] **Rejestracja w Mesh**: Zapis postępów i paragonu audytowego za pomocą `record_task_completion.py`.
+- [x] **REST API**: Punkt końcowy `POST /v2/search/evidence` zwraca w pełni zwalidowany `EvidencePackage` dla klientów zewnętrznych.
+- [x] **Wzbogacanie Ingestii**: Zapis pamięci kodu źródłowego przez REST API automatycznie tworzy poprawny `ContextEnvelope` z atrybucją AST.
+- [x] **Wielomodalność i GraphRAG w `RAEEngine`**: Zapytania kierowane do fasady silnika mogą bezpośrednio korzystać ze strategii `graph_lite` i `visual`.
+- [x] **Autonomia Refleksji**: Społeczności grafu wiedzy są automatycznie syntezowane do warstwy `reflective` przez zadanie w tle.
+- [x] **Zero Regresji**: 100% testów przechodzi pomyślnie (`make test-core` i testy API).
+- [x] **Zero Warning Policy**: Ruff, Black, isort oraz Mypy w 100% czyste bez żadnych ostrzeżeń.
+- [x] **Rejestracja w Mesh**: Zapis postępów i paragonu audytowego za pomocą `record_task_completion.py`.
