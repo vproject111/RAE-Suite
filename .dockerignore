@@ -1,6 +1,9 @@
 .git
+**/.git
 .venv
 venv
+**/.venv
+**/venv
 node_modules
 **/node_modules
 packages/rae-open-claw/node_modules
@@ -15,3 +18,7 @@ packages/rae-phoenix/.git
 packages/rae-phoenix/frontend-master
 packages/rae-phoenix/.pytest_cache
 packages/rae-phoenix/htmlcov
+htmlcov
+.pytest_cache
+**/__pycache__
+
