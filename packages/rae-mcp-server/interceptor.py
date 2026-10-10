@@ -38,8 +38,9 @@ class PassiveMemoryInterceptor:
         tenant_id: Optional[str] = None,
         enabled: Optional[bool] = None,
         timeout: float = 2.0,
+        auto_consolidate_interval: int = 20,
     ):
-        self.api_url = (api_url or os.getenv("RAE_API_URL", "http://localhost:8001")).rstrip("/")
+        self.api_url = (api_url or os.getenv("RAE_API_URL", "http://localhost:8000")).rstrip("/")
         self.api_key = api_key or os.getenv("RAE_API_KEY", "dev-key")
         self.tenant_id = tenant_id or os.getenv("RAE_TENANT_ID", "00000000-0000-0000-0000-000000000000")
 
@@ -50,6 +51,8 @@ class PassiveMemoryInterceptor:
             self.enabled = env_val in ("1", "true", "yes", "on")
 
         self.timeout = timeout
+        self.auto_consolidate_interval = auto_consolidate_interval
+        self._trace_counter = 0
         self.headers = {
             "X-API-Key": self.api_key,
             "X-Tenant-Id": self.tenant_id,
@@ -171,6 +174,15 @@ class PassiveMemoryInterceptor:
                 "implicit_capture": True,
             },
         }
+
+        self._trace_counter += 1
+        if self.auto_consolidate_interval > 0 and self._trace_counter >= self.auto_consolidate_interval:
+            self._trace_counter = 0
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.consolidate_traces(project=project))
+            except RuntimeError:
+                pass
 
         if fire_and_forget:
             try:

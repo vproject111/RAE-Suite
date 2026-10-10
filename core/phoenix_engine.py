@@ -1,8 +1,7 @@
 import uuid
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from rae_contracts import (
     PhoenixRepairIteration, PhoenixRepairDecision, QualityStatus, 
     AuditableEventType, MinimumAuditableEvent
@@ -67,7 +66,7 @@ class PhoenixEngine:
             self.bridge.log_decision(
                 action="phoenix_iteration_completed",
                 reasoning=f"Phoenix attempt {attempt} result: {iteration.final_decision}",
-                payload=iteration.dict()
+                payload=iteration.model_dump() if hasattr(iteration, "model_dump") else iteration.dict()
             )
 
             if success:
@@ -100,4 +99,4 @@ class PhoenixEngine:
             human_label=label,
             sequence_no=0 # In a real system, this would be monotonic
         )
-        self.bridge.save_event(f"Phoenix Audit: {label} ({event_type})", layer="episodic")
+        self.bridge.save_event(f"Phoenix Audit: {label} ({event_type}) - Event: {event.event_id}", layer="episodic")

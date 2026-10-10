@@ -1,5 +1,6 @@
 """Unit tests for PassiveMemoryInterceptor and Shadow Traces (Faza 4)."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -133,3 +134,25 @@ async def test_interceptor_consolidate_traces():
         assert res["status"] == "success"
         assert res["consolidated_count"] == 2
         assert res["memory_id"] == "consolidated-uuid-99"
+
+
+@pytest.mark.asyncio
+async def test_interceptor_auto_consolidation_trigger():
+    p = PassiveMemoryInterceptor(api_url="http://mock-rae:8000", enabled=True, auto_consolidate_interval=3)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_resp.json.return_value = {"memory_id": "trace-1"}
+
+    with patch.object(p, "consolidate_traces", new_callable=AsyncMock) as mock_consolidate, \
+         patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp):
+
+        for i in range(2):
+            await p.capture_trace(tool_name="tool_a", arguments={}, result="ok", duration_ms=1.0, fire_and_forget=False)
+        assert mock_consolidate.call_count == 0
+
+        # Third invocation should trigger auto-consolidation
+        await p.capture_trace(tool_name="tool_a", arguments={}, result="ok", duration_ms=1.0, fire_and_forget=False)
+        # Give asyncio loop a tick
+        await asyncio.sleep(0.01)
+        assert mock_consolidate.call_count == 1

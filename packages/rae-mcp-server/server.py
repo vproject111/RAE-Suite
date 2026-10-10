@@ -66,7 +66,7 @@ triad_runner = LayerTriadRunner()
 sandbox_manager = DockerSandboxManager()
 worktree_manager = GitWorktreeManager(repo_root=str(BASE_DIR))
 
-RAE_API_URL = os.getenv("RAE_API_URL", "http://localhost:8001")
+RAE_API_URL = os.getenv("RAE_API_URL", "http://localhost:8000")
 RAE_API_KEY = os.getenv("RAE_API_KEY", "dev-key")
 RAE_TENANT_ID = os.getenv("RAE_TENANT_ID", "00000000-0000-0000-0000-000000000000")
 

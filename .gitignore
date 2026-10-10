@@ -10,4 +10,6 @@ build/
 *.xml
 *.log
 .env.bak
+.coverage
+htmlcov/
 "docs/Rekomendowana Kolejność.txt"
