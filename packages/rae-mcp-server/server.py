@@ -145,6 +145,20 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="rae_phoenix_repair",
+            description="Autonomously repairs, refactors, or transforms code using RAE-Phoenix language plugins (Python AST, TypeScript, PHP) and refactoring recipes.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "The source code to repair or refactor"},
+                    "file_path": {"type": "string", "description": "Path to the target file (determines language plugin)", "default": "snippet.py"},
+                    "reason": {"type": "string", "description": "The repair objective or refactoring intention", "default": "Refactor and optimize code"},
+                    "project": {"type": "string", "description": "Project name for contextual audit", "default": "default"}
+                },
+                "required": ["code"]
+            }
+        ),
+        Tool(
             name="rae_sandbox_exec",
             description="Executes a command safely inside an ephemeral Git Worktree mounted into an isolated Docker container (--network none) with automatic cleanup.",
             inputSchema={
@@ -322,6 +336,68 @@ async def _execute_tool(name: str, arguments: dict) -> List[TextContent]:
             indexer = get_system_indexer()
             impact = indexer.get_impact_zone(file_path)
             return [TextContent(type="text", text=json.dumps(impact, indent=2))]
+
+        elif name == "rae_phoenix_repair":
+            code = arguments.get("code", "")
+            file_path = arguments.get("file_path", "snippet.py")
+            reason = arguments.get("reason", "Refactor and optimize code")
+            project = arguments.get("project", "default")
+
+            # 1. Try delegating to live Phoenix HTTP service if running
+            phoenix_url = os.getenv("RAE_PHOENIX_URL", "http://localhost:8012")
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    resp = await client.post(
+                        f"{phoenix_url}/v2/phoenix/repair",
+                        json={
+                            "code": code,
+                            "file_path": file_path,
+                            "reason": reason,
+                            "project": project,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        return [TextContent(type="text", text=json.dumps(resp.json(), indent=2))]
+            except Exception:
+                pass
+
+            # 2. In-process fallback via language plugins
+            try:
+                from feniks.core.plugins.base import RefactorIntention
+                from feniks.core.plugins.manager import PluginManager
+
+                pm = PluginManager()
+                plugin = pm.get_plugin_for_file(file_path)
+                if plugin:
+                    intention = RefactorIntention(
+                        objective=reason,
+                        target_files=[file_path],
+                        context={"project": project},
+                    )
+                    fixed_code = await plugin.execute_refactor(code, intention)
+                    res = {
+                        "status": "SUCCESS",
+                        "plugin_used": plugin.name,
+                        "file_path": file_path,
+                        "refactored_code": fixed_code,
+                        "objective": reason,
+                    }
+                    return [TextContent(type="text", text=json.dumps(res, indent=2))]
+                else:
+                    return [
+                        TextContent(
+                            type="text",
+                            text=json.dumps(
+                                {
+                                    "status": "NO_PLUGIN",
+                                    "message": f"No language plugin found for {file_path}. Supported: {pm.list_available_plugins()}",
+                                },
+                                indent=2,
+                            ),
+                        )
+                    ]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Phoenix repair error: {e}")]
 
         elif name in ("rae_sandbox_exec", "rae_sandbox_run"):
             command = arguments.get("command", "")

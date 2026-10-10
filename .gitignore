@@ -1,6 +1,7 @@
 node_modules/
 .openclaw/
 workspace/audit_proposals/
+workspace/sandboxes/
 .openclaw_config/
 __pycache__/
 *.pyc

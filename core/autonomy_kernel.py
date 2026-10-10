@@ -443,7 +443,8 @@ class AutonomyKernel:
 
         # 9. QUALITY_GATE
         # Enforce Handoff Envelope for Quality Gate
-        payload["handoff_quality"] = self._create_handoff_envelope(trace_id, "kernel", "rae-quality", ["quality.evaluate_patch"], payload)
+        _handoff_quality = self._create_handoff_envelope(trace_id, "kernel", "rae-quality", ["quality.evaluate_patch"], payload)
+        payload["handoff_quality"] = json.loads(_handoff_quality.model_dump_json()) if hasattr(_handoff_quality, "model_dump_json") else json.loads(_handoff_quality.json())
         
         # Enforce Silicon Oracle v7.0 Quality Standards and Constitution
         metrics_payload = payload.get("metrics", {"tests_passed": True, "coverage_before": 80.0, "coverage_after": 80.1})

@@ -61,6 +61,19 @@ async def test_phoenix_impact_tool():
         assert data["total_dependents"] == 1
 
 @pytest.mark.asyncio
+async def test_phoenix_repair_python_plugin():
+    code = "def hello(): pass"
+    results = await call_tool(
+        "rae_phoenix_repair",
+        {"code": code, "file_path": "test_module.py", "reason": "Refactor hello"}
+    )
+    assert len(results) == 1
+    data = json.loads(results[0].text)
+    assert data["status"] == "SUCCESS"
+    assert data["plugin_used"] == "python"
+    assert "test_module.py" in data["file_path"]
+
+@pytest.mark.asyncio
 async def test_memory_search_tool_with_authority_sorting():
     mock_resp = MagicMock()
     mock_resp.status_code = 200
