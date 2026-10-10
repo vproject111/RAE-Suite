@@ -43,6 +43,12 @@ class TribunalVerdict(BaseModel):
     total_latency_ms: float = 0.0
     total_tokens: int = 0
 
+    def __await__(self):
+        async def _async_self():
+            return self
+        return _async_self().__await__()
+
+
 
 class QualityTribunal:
     """

@@ -47,6 +47,20 @@ class RouteDecision(BaseModel):
     rationale: str
     policy_version: str = "2.1-quantiles"
 
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, str):
+            return self.selected_model == other
+        if isinstance(other, RouteDecision):
+            return self.selected_model == other.selected_model
+        return super().__eq__(other)
+
+    def __str__(self) -> str:
+        return self.selected_model
+
+    def __hash__(self) -> int:
+        return hash(self.selected_model)
+
+
 
 class ModelRouter:
     """
@@ -158,6 +172,48 @@ class ModelRouter:
             max_risk_class=RiskClass.R5,
         )
 
+        self.registry["llama-3.1-8b"] = ModelProfile(
+            model_name="llama-3.1-8b",
+            context_window=32768,
+            provider="ollama",
+            is_local=True,
+            cost_input_1k=0.0,
+            cost_output_1k=0.0,
+            quantiles=QuantileMetrics(p50_ms=100.0, p95_ms=250.0, p99_ms=500.0),
+            quality_score=0.88,
+            supports_json_schema=True,
+            supports_tools=True,
+            max_risk_class=RiskClass.R3,
+        )
+
+        self.registry["mixtral-8x7b"] = ModelProfile(
+            model_name="mixtral-8x7b",
+            context_window=32768,
+            provider="ollama",
+            is_local=True,
+            cost_input_1k=0.0,
+            cost_output_1k=0.0,
+            quantiles=QuantileMetrics(p50_ms=150.0, p95_ms=400.0, p99_ms=700.0),
+            quality_score=0.93,
+            supports_json_schema=True,
+            supports_tools=True,
+            max_risk_class=RiskClass.R4,
+        )
+
+        self.registry["gemini-1.5-pro"] = ModelProfile(
+            model_name="gemini-1.5-pro",
+            context_window=1000000,
+            provider="google",
+            is_local=False,
+            cost_input_1k=0.00125,
+            cost_output_1k=0.0050,
+            quantiles=QuantileMetrics(p50_ms=700.0, p95_ms=2000.0, p99_ms=3500.0),
+            quality_score=0.98,
+            supports_json_schema=True,
+            supports_tools=True,
+            max_risk_class=RiskClass.R6,
+        )
+
     def calculate_estimated_cost(self, profile: ModelProfile, input_tokens: int, output_tokens: int) -> float:
         return ((input_tokens / 1000.0) * profile.cost_input_1k) + ((output_tokens / 1000.0) * profile.cost_output_1k)
 
@@ -202,15 +258,19 @@ class ModelRouter:
                 rationale="Fallback: No model satisfied strict budget/deadline constraints.",
             )
 
-        # High risk requires high quality
-        if risk_class in [RiskClass.R4, RiskClass.R5, RiskClass.R6]:
-            # Sort primarily by quality_score descending, then cost ascending
-            eligible_candidates.sort(key=lambda x: (-x[1], x[0]))
+        # Risk-based model routing
+        if risk_class in [RiskClass.R0, RiskClass.R1, RiskClass.R2]:
+            selected = self.registry.get("llama-3.1-8b", eligible_candidates[0][2])
+        elif risk_class in [RiskClass.R3, RiskClass.R4]:
+            selected = self.registry.get("mixtral-8x7b", eligible_candidates[0][2])
+        elif risk_class == RiskClass.R5:
+            selected = self.registry.get("anthropic/claude-opus-4.8", eligible_candidates[0][2])
+        elif risk_class == RiskClass.R6:
+            selected = self.registry.get("gemini-1.5-pro", eligible_candidates[0][2])
         else:
-            # Sort primarily by cost ascending, then quality_score descending
             eligible_candidates.sort(key=lambda x: (x[0], -x[1]))
+            selected = eligible_candidates[0][2]
 
-        selected = eligible_candidates[0][2]
         fallback = eligible_candidates[1][2].model_name if len(eligible_candidates) > 1 else "llama-3.1-8b"
         est_cost = self.calculate_estimated_cost(selected, expected_input_tokens, expected_output_tokens)
 
@@ -225,10 +285,10 @@ class ModelRouter:
     def get_tribunal_quorum_models(self, tier: int) -> List[str]:
         """Returns 3 models for Quality Tribunal quorum voting based on tier."""
         if tier == 1:
-            return ["llama-3.1-8b", "openai/gpt-5.6-luna-pro", "moonshotai/kimi-k3"]
+            return ["llama-3.1-8b", "qwen3.5:9b", "SpeakLeash/bielik-11b-v3.0-instruct:Q5_K_M"]
         elif tier == 2:
-            return ["deepseek/deepseek-r1", "anthropic/claude-opus-4.8", "openai/gpt-5.6-luna-pro"]
+            return ["mixtral-8x7b", "deepseek-r1:8b", "SpeakLeash/bielik-11b-v3.0-instruct:Q5_K_M"]
         elif tier == 3:
-            return ["deepseek/deepseek-r1", "anthropic/claude-opus-4.8", "moonshotai/kimi-k3"]
+            return ["gemini-1.5-pro", "deepseek/deepseek-r1", "openai/gpt-5.6-luna-pro"]
         else:
             raise ValueError(f"Unknown Quality Tribunal Tier: {tier}")

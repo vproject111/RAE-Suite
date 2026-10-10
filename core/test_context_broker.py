@@ -1,7 +1,7 @@
-import pytest
+from datetime import datetime, timezone, timedelta
 from core.context_broker import ContextBroker
-from rae_contracts import ContextEnvelope
-from datetime import datetime, timezone
+from rae_contracts import ContextEnvelope, InformationClass, MemoryLayer
+
 
 def test_adaptive_retrieval_depth():
     broker = ContextBroker()
@@ -29,42 +29,47 @@ def test_adaptive_retrieval_depth():
 
 def test_hierarchical_context_pruning():
     broker = ContextBroker(token_limit=45) # Small token limit to force pruning
+    now = datetime.now(timezone.utc)
+    valid_until = now + timedelta(hours=1)
     
     envelopes = [
         ContextEnvelope(
-            context_id="ctx-1",
+            id="ctx-1",
             source_uri="rae://mem/1",
-            source_hash="sha-1",
+            source_hash="a" * 64,
             trust_score=0.9,
-            information_class="internal",
+            information_class=InformationClass.INTERNAL,
             tenant_id="t-1",
             project_id="p-1",
-            memory_layer="semantic",
-            valid_until=datetime.now(timezone.utc),
+            memory_layer=MemoryLayer.SEMANTIC,
+            created_at=now,
+            valid_until=valid_until,
             retrieved_content="This is high priority content that should fit in the context."
         ),
         ContextEnvelope(
-            context_id="ctx-2",
+            id="ctx-2",
             source_uri="rae://mem/2",
-            source_hash="sha-2",
+            source_hash="b" * 64,
             trust_score=0.8,
-            information_class="internal",
+            information_class=InformationClass.INTERNAL,
             tenant_id="t-1",
             project_id="p-1",
-            memory_layer="reflective",
-            valid_until=datetime.now(timezone.utc),
+            memory_layer=MemoryLayer.REFLECTIVE,
+            created_at=now,
+            valid_until=valid_until,
             retrieved_content="This is also important but might fit."
         ),
         ContextEnvelope(
-            context_id="ctx-3",
+            id="ctx-3",
             source_uri="rae://mem/3",
-            source_hash="sha-3",
+            source_hash="c" * 64,
             trust_score=0.4,
-            information_class="internal",
+            information_class=InformationClass.INTERNAL,
             tenant_id="t-1",
             project_id="p-1",
-            memory_layer="working",
-            valid_until=datetime.now(timezone.utc),
+            memory_layer=MemoryLayer.WORKING,
+            created_at=now,
+            valid_until=valid_until,
             retrieved_content="This is low priority garbage that should be pruned because it exceeds the small limit."
         )
     ]

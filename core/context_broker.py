@@ -90,7 +90,8 @@ class ContextBroker:
                 current_token_count += word_count
             else:
                 # Prune this and subsequent leaves
-                logger.info(f"context_pruning: pruned envelope {env.context_id} due to budget limit ({current_token_count} / {self.token_limit} words)")
+                env_id = getattr(env, "context_id", getattr(env, "id", "unknown"))
+                logger.info(f"context_pruning: pruned envelope {env_id} due to budget limit ({current_token_count} / {self.token_limit} words)")
                 
         leaves_section = "=== RETRIEVED MEMORY LEAVES ===\n" + "\n\n".join(leaf_parts)
         

@@ -2,6 +2,9 @@ node_modules/
 .openclaw/
 workspace/audit_proposals/
 workspace/sandboxes/
+workspace/forged_tools/
+workspace/tool_outputs/
+workspace/trajectory_logs/
 .openclaw_config/
 __pycache__/
 *.pyc

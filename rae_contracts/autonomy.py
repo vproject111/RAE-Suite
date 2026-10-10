@@ -543,6 +543,11 @@ class ContextEnvelope(BaseModel):
             )
         return self
 
+    @property
+    def context_id(self) -> str:
+        return self.id
+
+
 class WorkflowStep(BaseModel):
     model_config = CONTRACT_CONFIG
 
@@ -703,6 +708,11 @@ class ConsensusProposal(BaseModel):
                 "valid for individual votes"
             )
         return value
+
+    @property
+    def proposal_id(self) -> str:
+        return self.id
+
 
 # ==========================================
 # RESPONSE MODELS (RAE-First: Sensitive Field Redaction)

@@ -532,6 +532,8 @@ class AutonomyKernel:
         
         finished_at = datetime.now(timezone.utc)
         elapsed_seconds = (finished_at - started_at).total_seconds()
+        if len(evidence_hash) != 64:
+            evidence_hash = hashlib.sha256(evidence_hash.encode()).hexdigest()
         
         # Construct OutcomeRecord (OTEL context propagation + telemetry)
         otel_span_id = f"spn-{uuid.uuid4().hex[:8]}"
