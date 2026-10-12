@@ -106,9 +106,11 @@ services:
     environment:
       - RAE_API_URL=http://rae-memory:8000
       - PYTHONPATH=/app
+      - RAE_CLOUD_ROOT=/cloud
     volumes:
       - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
+      - ..:/cloud:ro
     depends_on:
       - rae-suite
     networks:
