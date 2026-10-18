@@ -195,9 +195,29 @@ class RAESupervisor:
 supervisor = RAESupervisor()
 server = Server("rae-cloud-supervisor")
 
+def _load_unified_mcp_module():
+    mcp_pkg_dir = os.path.join(SCRIPT_DIR, "packages", "rae-mcp-server")
+    if os.path.exists(mcp_pkg_dir) and mcp_pkg_dir not in sys.path:
+        sys.path.insert(0, mcp_pkg_dir)
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "rae_unified_mcp_server",
+            os.path.join(mcp_pkg_dir, "server.py"),
+        )
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+    except Exception:
+        return None
+    return None
+
+_unified_mcp = _load_unified_mcp_module()
+
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
-    return [
+    base_tools = [
         types.Tool(
             name="get_cloud_status",
             description="Returns the current status of all Docker containers.",
@@ -258,6 +278,16 @@ async def handle_list_tools() -> List[types.Tool]:
             },
         )
     ]
+    if _unified_mcp is not None:
+        try:
+            unified_tools = await _unified_mcp.list_tools()
+            existing_names = {t.name for t in base_tools}
+            for ut in unified_tools:
+                if ut.name not in existing_names:
+                    base_tools.append(ut)
+        except Exception:
+            pass
+    return base_tools
 
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.Content]:
@@ -272,6 +302,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.C
             res = await supervisor.create_rae_memory(**arguments)
         elif name == "get_service_logs":
             res = await supervisor.get_service_logs(**arguments)
+        elif _unified_mcp is not None:
+            return await _unified_mcp.call_tool(name, arguments or {})
         else:
             raise ValueError(f"Unknown tool: {name}")
         

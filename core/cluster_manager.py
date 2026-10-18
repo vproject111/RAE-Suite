@@ -49,11 +49,12 @@ class ClusterManager:
         self._load_config()
 
     def _find_config_path(self) -> str:
+        env_cfg = os.getenv("RAE_CLUSTER_CONFIG")
+        if env_cfg and os.path.exists(env_cfg):
+            return os.path.abspath(env_cfg)
         candidates = [
             os.path.join(os.path.dirname(__file__), "..", "config", "cluster.yaml"),
             os.path.join(os.path.dirname(__file__), "..", "packages", "rae-agentic-memory", "config", "cluster.yaml"),
-            "/home/grzegorz/cloud/RAE-Suite/packages/rae-agentic-memory/config/cluster.yaml",
-            "/home/grzegorz/cloud/config/cluster.yaml",
         ]
         for c in candidates:
             if os.path.exists(c):
@@ -93,12 +94,20 @@ class ClusterManager:
                 description=cfg.get("description", f"Compute Node {nid}"),
             )
 
+    @staticmethod
+    def _is_running_on_node1() -> bool:
+        import socket
+        return socket.gethostname().lower() == "lumina"
+
     async def check_node_health(self, node_id: str) -> bool:
         node = self.nodes.get(node_id)
         if not node:
             return False
 
         if node.transport == "ssh_mcp":
+            if node_id == "node1" and self._is_running_on_node1():
+                node.is_online = True
+                return True
             cmd = f"ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes {node.user}@{node.host} 'exit 0'"
             proc = await asyncio.create_subprocess_shell(
                 cmd,
@@ -110,14 +119,18 @@ class ClusterManager:
             return node.is_online
 
         elif node.transport == "local_proxy":
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.get(f"{node.url}/api/tags")
-                    node.is_online = resp.status_code == 200
-                    return node.is_online
-            except Exception:
-                node.is_online = False
-                return False
+            urls = [node.url, "http://127.0.0.1:11434"] if node.url else ["http://127.0.0.1:11434"]
+            for candidate_url in urls:
+                try:
+                    async with httpx.AsyncClient(timeout=3.0) as client:
+                        resp = await client.get(f"{candidate_url}/api/tags")
+                        if resp.status_code == 200:
+                            node.is_online = True
+                            return True
+                except Exception:
+                    continue
+            node.is_online = False
+            return False
 
         return False
 
@@ -137,33 +150,38 @@ class ClusterManager:
         return status
 
     async def list_node3_models(self) -> List[str]:
-        """Fetches active model names from Node 3 (Ollama)."""
+        """Fetches active model names from Node 3 (Ollama) with local Ollama fallback."""
         node = self.nodes.get("node3")
-        if not node or not node.url:
-            return []
+        urls = [node.url, "http://127.0.0.1:11434"] if (node and node.url) else ["http://127.0.0.1:11434"]
 
-        try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                resp = await client.get(f"{node.url}/api/tags")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return [m.get("name") for m in data.get("models", [])]
-        except Exception as e:
-            logger.error(f"Failed to fetch models from Node 3: {e}")
+        for candidate_url in urls:
+            try:
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.get(f"{candidate_url}/api/tags")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        models = [m.get("name") for m in data.get("models", [])]
+                        if models:
+                            return models
+            except Exception as e:
+                logger.debug(f"Failed to fetch models from {candidate_url}: {e}")
         return []
 
     async def execute_node1_command(self, command: str, timeout_seconds: int = 60) -> Tuple[int, str, str]:
-        """Executes a remote command on Node 1 (Lumina) over SSH."""
+        """Executes a remote command on Node 1 (Lumina) over SSH (or locally if already on Node 1)."""
         node = self.nodes.get("node1")
         if not node or not node.host:
             raise ValueError("Node 1 is not configured")
 
-        ssh_cmd = (
-            f"ssh -o StrictHostKeyChecking=no -o BatchMode=yes "
-            f"{node.user}@{node.host} '{command}'"
-        )
+        if self._is_running_on_node1():
+            exec_cmd = command
+        else:
+            exec_cmd = (
+                f"ssh -o StrictHostKeyChecking=no -o BatchMode=yes "
+                f"{node.user}@{node.host} '{command}'"
+            )
         proc = await asyncio.create_subprocess_shell(
-            ssh_cmd,
+            exec_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

@@ -52,6 +52,12 @@ from rae_contracts.autonomy import (
     InformationClass,
     RestrictedContextEntry,
     MemoryLayer,
+    TransitionError,
+    InvalidTransitionError,
+    TransitionAuthorizationError,
+    TransitionGuardError,
+    TransitionInvariantError,
+    TransitionContract,
 )
 from rae_contracts.execution_receipt import (
     ExecutionReceipt,
@@ -127,4 +133,10 @@ __all__ = [
     "ConsensusProposal",
     "InformationClass",
     "RestrictedContextEntry",
+    "TransitionError",
+    "InvalidTransitionError",
+    "TransitionAuthorizationError",
+    "TransitionGuardError",
+    "TransitionInvariantError",
+    "TransitionContract",
 ]
