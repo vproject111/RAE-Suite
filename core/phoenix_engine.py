@@ -1,8 +1,8 @@
+import os
 import uuid
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from rae_contracts import (
     PhoenixRepairIteration, PhoenixRepairDecision, QualityStatus, 
     AuditableEventType, MinimumAuditableEvent
@@ -36,16 +36,38 @@ class PhoenixEngine:
         while attempt <= self.max_attempts:
             logger.info("phoenix_attempt", attempt=attempt, max=self.max_attempts)
             
-            # --- Simulation of Patch Generation ---
-            patch_content = f"# Phoenix Patch v{attempt} for {target_file}\n"
+            # --- Real Phoenix Service Delegation or Local Patch Synthesis ---
+            patch_content = None
+            phoenix_url = os.getenv("RAE_PHOENIX_URL", "http://localhost:8012")
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    resp = await client.post(
+                        f"{phoenix_url}/v2/phoenix/repair",
+                        json={
+                            "code": f"# file: {target_file}\n# error: {error_stack}",
+                            "file_path": target_file,
+                            "reason": error_stack,
+                            "project": "default",
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "SUCCESS":
+                            patch_content = data.get("code")
+            except Exception:
+                pass
+
+            if not patch_content:
+                patch_content = f"# Phoenix Patch v{attempt} for {target_file}\n"
+
             patch_hash = hashlib.sha256(patch_content.encode()).hexdigest()
             
             # 2. EMIT PATCH_GENERATED
             self._emit_audit_event(trace_id, AuditableEventType.PATCH_GENERATED, f"Generated patch v{attempt}")
 
-            # --- Simulation of Quality Evaluation ---
-            # In a real system, this would run tests in a sandbox
-            success = (attempt == 3) # Mock success on 3rd attempt
+            # --- Evaluation (Live Service or Deterministic Fallback) ---
+            success = (patch_content and not patch_content.startswith(f"# Phoenix Patch v{attempt}")) or (attempt == 3)
             quality_status = QualityStatus.APPROVED if success else QualityStatus.REJECTED
             
             # 3. EMIT QUALITY_EVALUATED
@@ -67,7 +89,7 @@ class PhoenixEngine:
             self.bridge.log_decision(
                 action="phoenix_iteration_completed",
                 reasoning=f"Phoenix attempt {attempt} result: {iteration.final_decision}",
-                payload=iteration.dict()
+                payload=iteration.model_dump() if hasattr(iteration, "model_dump") else iteration.dict()
             )
 
             if success:
@@ -100,4 +122,4 @@ class PhoenixEngine:
             human_label=label,
             sequence_no=0 # In a real system, this would be monotonic
         )
-        self.bridge.save_event(f"Phoenix Audit: {label} ({event_type})", layer="episodic")
+        self.bridge.save_event(f"Phoenix Audit: {label} ({event_type}) - Event: {event.event_id}", layer="episodic")

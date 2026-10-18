@@ -42,6 +42,7 @@ services:
       - rae-internal
 
   rae-quality:
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:2.9.0
     build: ./packages/rae-quality
     container_name: rae-quality
     restart: unless-stopped
@@ -50,7 +51,7 @@ services:
       - RAE_API_URL=http://rae-memory:8000
     volumes:
       - ./packages/rae-quality:/app
-      - ./packages/rae-core/src/rae_core:/app/rae_core
+      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]

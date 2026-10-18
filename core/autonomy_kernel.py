@@ -5,10 +5,10 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from rae_contracts import (
-    TaskState, RiskClass, RiskAssessment, DecisionType, 
+    TaskState, RiskClass, DecisionType, 
     ExecutionStatus, QualityStatus, MemoryWritebackStatus,
-    ExecutionMode, ExecutionReceipt, StateTransition,
-    DecisionLedgerEntry, PolicyBundle, CapabilityContract,
+    ExecutionMode, AutonomyExecutionReceipt as ExecutionReceipt, StateTransition,
+    CapabilityContract,
     HandoffEnvelope, OutcomeRecord, VoteType, InformationClass, RestrictedContextEntry
 )
 from core.policy_checker import RiskClassifier, PolicyChecker
@@ -23,7 +23,15 @@ from core.cognitive_planner import CognitivePlanner
 from core.swarm_consensus import SwarmConsensusEngine
 from core.tool_gateway import ToolGateway
 
+import jwt
+from jwt import PyJWTError as JWTError
+
 logger = logging.getLogger(__name__)
+
+
+class FatalEnterpriseError(RuntimeError):
+    """Critical security or governance violation in AutonomyKernel."""
+    pass
 
 class AutonomyKernel:
     """
@@ -146,7 +154,7 @@ class AutonomyKernel:
             payload["swarm_consensus_proposal"] = json.loads(proposal.model_dump_json()) if hasattr(proposal, "model_dump_json") else json.loads(proposal.json())
             
             if proposal.final_decision == VoteType.REJECT:
-                transition(TaskState.REJECTED, f"Rejected via Swarm Consensus. Quality Veto or weighted reject.")
+                transition(TaskState.REJECTED, "Rejected via Swarm Consensus. Quality Veto or weighted reject.")
                 return self._finalize_receipt(
                     goal_id, task_id, trace_id, risk_assessment.risk_class, 
                     policy_decision, ExecutionStatus.REJECTED, TaskState.REJECTED, 
@@ -435,7 +443,8 @@ class AutonomyKernel:
 
         # 9. QUALITY_GATE
         # Enforce Handoff Envelope for Quality Gate
-        handoff_quality = self._create_handoff_envelope(trace_id, "kernel", "rae-quality", ["quality.evaluate_patch"], payload)
+        _handoff_quality = self._create_handoff_envelope(trace_id, "kernel", "rae-quality", ["quality.evaluate_patch"], payload)
+        payload["handoff_quality"] = json.loads(_handoff_quality.model_dump_json()) if hasattr(_handoff_quality, "model_dump_json") else json.loads(_handoff_quality.json())
         
         # Enforce Silicon Oracle v7.0 Quality Standards and Constitution
         metrics_payload = payload.get("metrics", {"tests_passed": True, "coverage_before": 80.0, "coverage_after": 80.1})
@@ -523,6 +532,8 @@ class AutonomyKernel:
         
         finished_at = datetime.now(timezone.utc)
         elapsed_seconds = (finished_at - started_at).total_seconds()
+        if len(evidence_hash) != 64:
+            evidence_hash = hashlib.sha256(evidence_hash.encode()).hexdigest()
         
         # Construct OutcomeRecord (OTEL context propagation + telemetry)
         otel_span_id = f"spn-{uuid.uuid4().hex[:8]}"
@@ -615,7 +626,7 @@ class AutonomyKernel:
         self.bridge.log_decision(
             action="execution_completed",
             reasoning=f"Task {task_id} finished with status {execution_status}.",
-            payload=receipt.dict()
+            payload=receipt.model_dump() if hasattr(receipt, "model_dump") else receipt.dict()
         )
         
         return receipt

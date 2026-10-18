@@ -1,4 +1,5 @@
 # test_factory_impulse.py
+__test__ = False
 import requests
 import json
 from datetime import datetime

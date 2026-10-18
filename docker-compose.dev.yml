@@ -2,7 +2,7 @@
 include:
   - path: ../RAE-agentic-memory/docker-compose.dev.yml
   - path: ../RAE-Hive_eyes/docker-compose.dev.yml
-  - path: ../RAE-Quality/docker-compose.dev.yml
+  - path: ./packages/rae-quality/docker-compose.dev.yml
   - path: ../RAE-Lab/docker-compose.dev.yml
   - path: ../RAE-Phoenix/docker-compose.dev.yml
   - path: ./packages/rae-open-claw/docker-compose.secure.yml
