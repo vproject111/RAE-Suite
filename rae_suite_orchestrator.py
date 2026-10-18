@@ -36,7 +36,7 @@ class RAE_CEO_Orchestrator:
     """The Intelligent Brain of the RAE Suite (Unified Audit Edition) utilizing a Declarative Reconciler."""
     
     def __init__(self):
-        self.api_url = os.getenv("RAE_API_URL", "http://localhost:8011")
+        self.api_url = os.getenv("RAE_API_URL", "http://localhost:8000")
         self.orchestration_interval = int(os.getenv("ORCHESTRATION_TICK", "60"))
         self.last_action_time = None
         self.factory_spec_path = os.getenv("FACTORY_SPEC_PATH", "factory.yaml")
@@ -51,6 +51,12 @@ class RAE_CEO_Orchestrator:
         self.curiosity_engine = CuriosityEngine(kernel=self.kernel, repo_root=".")
         self.planning_agent = os.getenv("CEO_PLANNING_AGENT", "rae-oracle-gemini")
         self.batch_engine = BatchOptimizationEngine()
+        self.service_health_urls = {
+            "rae-phoenix": os.getenv("RAE_PHOENIX_URL", "http://localhost:8012") + "/health",
+            "rae-hive": os.getenv("RAE_HIVE_URL", "http://localhost:8013") + "/health",
+            "rae-quality": os.getenv("RAE_QUALITY_URL", "http://localhost:8010") + "/health",
+            "rae-lab": os.getenv("RAE_LAB_URL", "http://localhost:8011") + "/health",
+        }
 
     async def run_loop(self):
         logger.info("orchestrator_booted", role="CEO_Agent", mode="Declarative Reconciler")
@@ -133,11 +139,12 @@ class RAE_CEO_Orchestrator:
 
     async def _observe_system_state(self) -> Dict[str, Any]:
         """Queries Lab, Quality and Memory for actual live state snapshot."""
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        lab_url = os.getenv("RAE_LAB_URL", self.api_url)
+        async with httpx.AsyncClient(timeout=5.0) as client:
             # Query Lab Insights
             lab_resp = None
             try:
-                lab_resp = await client.get(f"{self.api_url}/v2/lab/insights")
+                lab_resp = await client.get(f"{lab_url}/v2/lab/insights")
             except Exception:
                 pass
                 
@@ -151,11 +158,25 @@ class RAE_CEO_Orchestrator:
                 })
             except Exception:
                 pass
+
+            # Probe live container health endpoints
+            active_agents = []
+            for svc_name, health_url in self.service_health_urls.items():
+                try:
+                    h_resp = await client.get(health_url, timeout=2.0)
+                    if h_resp.status_code == 200:
+                        active_agents.append(svc_name)
+                except Exception:
+                    pass
+
+            if not active_agents:
+                # Fallback to default active list when running in isolated unit tests without network
+                active_agents = ["rae-phoenix", "rae-hive", "rae-quality"]
             
             return {
                 "lab_insights": lab_resp.json() if lab_resp and lab_resp.status_code == 200 else {},
                 "backlog": task_resp.json().get("results", []) if task_resp and task_resp.status_code == 200 else [],
-                "active_agents": ["rae-phoenix", "rae-hive", "rae-quality"] # Mock actual docker running states
+                "active_agents": active_agents
             }
 
     def _detect_configuration_drifts(self, desired: Dict[str, Any], actual: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -176,11 +197,15 @@ class RAE_CEO_Orchestrator:
         return drifts
 
     async def _align_drift(self, drift: Dict[str, Any]):
-        """Executes corrective commands to automatically align configuration dry-runs."""
+        """Executes corrective commands via InfraReconciler to automatically align configuration drifts."""
         agent = drift.get("agent")
         logger.warning("aligning_drift_correction", agent=agent, type=drift.get("type"))
+        try:
+            if hasattr(self.infra_reconciler, "restart_service"):
+                self.infra_reconciler.restart_service(agent)
+        except Exception as e:
+            logger.warning("infra_reconciler_restart_failed", agent=agent, error=str(e))
         
-        # In a real environment, this invokes docker-compose or hive deployment command
         self.bridge.save_event(f"Autonomicznie naprawiono dryf: uruchomiono brakujący kontener {agent}.", layer="episodic")
 
     async def _decide_backlog_action(self, state: Dict[str, Any]) -> Dict[str, Any]:

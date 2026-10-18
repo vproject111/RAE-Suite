@@ -9,7 +9,8 @@ from rae_contracts import (
     ExecutionStatus, QualityStatus, MemoryWritebackStatus,
     ExecutionMode, AutonomyExecutionReceipt as ExecutionReceipt, StateTransition,
     CapabilityContract,
-    HandoffEnvelope, OutcomeRecord, VoteType, InformationClass, RestrictedContextEntry
+    HandoffEnvelope, OutcomeRecord, VoteType, InformationClass, RestrictedContextEntry,
+    TransitionContract, TransitionError
 )
 from core.policy_checker import RiskClassifier, PolicyChecker
 from core.gitops_daemon import GitOpsDaemon
@@ -22,6 +23,8 @@ from core.context_trust_evaluator import ContextTrustEvaluator
 from core.cognitive_planner import CognitivePlanner
 from core.swarm_consensus import SwarmConsensusEngine
 from core.tool_gateway import ToolGateway
+from core.speculative_executor import SpeculativeToolExecutor
+from core.portal_hitl_approval import PortalHITLApprovalEngine
 
 import jwt
 from jwt import PyJWTError as JWTError
@@ -33,25 +36,47 @@ class FatalEnterpriseError(RuntimeError):
     """Critical security or governance violation in AutonomyKernel."""
     pass
 
+
+class _DefaultKernelBridge:
+    """Fallback bridge when AutonomyKernel is initialized without an explicit RAE bridge."""
+    def __init__(self) -> None:
+        self.api_url = "http://localhost:8000"
+        self.tenant_id = "00000000-0000-0000-0000-000000000000"
+        self.project = "default"
+
+    def save_event(self, content: str, layer: str = "episodic", **kwargs: Any) -> None:
+        logger.debug(f"bridge_save_event [{layer}]: {content}")
+
+    def log_decision(self, action: str, reasoning: str, payload: Any = None) -> None:
+        logger.debug(f"bridge_log_decision [{action}]: {reasoning}")
+
+
 class AutonomyKernel:
     """
     The central execution engine for RAE-Suite.
     Enforces the Task Lifecycle State Machine and produces signed Execution Receipts.
     """
-    def __init__(self, bridge, repo_root: str):
-        self.bridge = bridge
+    def __init__(self, bridge: Any = None, repo_root: str = "."):
+        self.bridge = bridge if bridge is not None else _DefaultKernelBridge()
+        self.tenant_id = getattr(self.bridge, "tenant_id", "00000000-0000-0000-0000-000000000000")
+        self.jwt_signing_key = ""
         self.tool_gateway = ToolGateway(repo_root)
+        self.speculative_executor = SpeculativeToolExecutor(self.tool_gateway)
+        self.hitl_engine = PortalHITLApprovalEngine()
         self.risk_classifier = RiskClassifier()
         self.policy_checker = PolicyChecker()
         self.gitops = GitOpsDaemon(repo_root)
         self.sandbox_manager = SandboxManager(repo_root)
-        self.phoenix = PhoenixEngine(bridge, self.sandbox_manager)
+        self.phoenix = PhoenixEngine(self.bridge, self.sandbox_manager)
         self.quality_sentinel = QualitySentinel(TestIntegrityGuard())
-        self.guardrail_manager = GuardrailManager(bridge)
+        self.guardrail_manager = GuardrailManager(self.bridge)
         self.trust_evaluator = ContextTrustEvaluator()
         self.cognitive_planner = CognitivePlanner()
         self.swarm_consensus = SwarmConsensusEngine()
         self.active_policy_hash = "p-default-v6.8"
+        self.cycle_limit = 5
+        self.transition_attempts: List[Dict[str, Any]] = []
+        self._idempotency_cache: Dict[str, Any] = {}
         self.capability_contracts = {
             "rae-phoenix": CapabilityContract(
                 id="cap-phoenix",
@@ -92,21 +117,76 @@ class AutonomyKernel:
         }
 
 
-    async def execute_task(self, goal_id: str, task_id: str, intent: str, payload: Dict[str, Any]) -> ExecutionReceipt:
+    async def execute_task(
+        self,
+        goal_id: str,
+        task_id: str,
+        intent: str,
+        payload: Optional[Dict[str, Any]] = None,
+        human_approved: bool = False,
+        idempotency_key: Optional[str] = None,
+    ) -> ExecutionReceipt:
+        if payload is None:
+            payload = {}
+
+        # ADR-001 Idempotency-Key check (canonical JSON payload hash verification)
+        effective_idem_key = idempotency_key or payload.get("idempotency_key")
+        canonical_payload_hash = hashlib.sha256(
+            json.dumps(
+                {"goal_id": goal_id, "task_id": task_id, "intent": intent, "human_approved": human_approved},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if effective_idem_key:
+            cached = self._idempotency_cache.get(str(effective_idem_key))
+            if cached is not None:
+                cached_hash, cached_receipt = cached
+                if cached_hash != canonical_payload_hash:
+                    raise FatalEnterpriseError(
+                        f"ADR-001 Idempotency-Key conflict: key '{effective_idem_key}' reused with different payload."
+                    )
+                return cached_receipt
+
         trace_id = f"trace-{uuid.uuid4()}"
         started_at = datetime.now(timezone.utc)
-        transitions = []
+        transitions: List[StateTransition] = []
+        state_visit_counts: Dict[TaskState, int] = {}
         sandbox_path = None
         
-        def transition(to_state: TaskState, reason: str = None):
+        def transition(to_state: TaskState, reason: str = None, actor: str = "autonomy-kernel"):
             from_state = transitions[-1].to_state if transitions else TaskState.RECEIVED
-            st = StateTransition(
+            visit_count = state_visit_counts.get(to_state, 0) + 1
+            state_visit_counts[to_state] = visit_count
+            contract = TransitionContract(
                 from_state=from_state,
                 to_state=to_state,
-                timestamp=datetime.now(timezone.utc),
-                reason=reason,
-                actor="autonomy-kernel"
+                cycle_limit=self.cycle_limit,
             )
+            try:
+                st = contract.apply(actor=actor, reason=reason, cycle_count=visit_count)
+                self.transition_attempts.append(
+                    {
+                        "trace_id": trace_id,
+                        "from_state": from_state.value,
+                        "to_state": to_state.value,
+                        "actor": actor,
+                        "outcome": "APPLIED",
+                        "reason": reason,
+                    }
+                )
+            except TransitionError as te:
+                self.transition_attempts.append(
+                    {
+                        "trace_id": trace_id,
+                        "from_state": from_state.value,
+                        "to_state": to_state.value,
+                        "actor": actor,
+                        "outcome": "REJECTED",
+                        "reason": str(te),
+                    }
+                )
+                raise
             transitions.append(st)
             logger.info(f"task_state_transition: trace_id={trace_id}, from_state={from_state}, to_state={to_state}")
 
@@ -165,18 +245,31 @@ class AutonomyKernel:
                 policy_decision = DecisionType.ALLOW
 
         if policy_decision == DecisionType.QUARANTINE:
+            transition(TaskState.QUARANTINED, "Task quarantined by policy.")
             return self._finalize_receipt(
                 goal_id, task_id, trace_id, risk_assessment.risk_class, 
                 policy_decision, ExecutionStatus.QUARANTINED, TaskState.QUARANTINED, 
-                transitions, started_at
+                transitions, started_at, idempotency_key=effective_idem_key, payload_hash=canonical_payload_hash
             )
 
         if policy_decision == DecisionType.NEEDS_APPROVAL:
-             return self._finalize_receipt(
-                goal_id, task_id, trace_id, risk_assessment.risk_class, 
-                policy_decision, ExecutionStatus.NEEDS_APPROVAL, TaskState.NEEDS_APPROVAL, 
-                transitions, started_at
-            )
+            if human_approved or payload.get("human_approved"):
+                policy_decision = DecisionType.ALLOW
+                transition(TaskState.APPROVED, "HITL operator approval verified.")
+            else:
+                hitl_req = self.hitl_engine.create_approval_request(
+                    target_module=payload.get("target_agent", "autonomy-kernel"),
+                    action_name=intent,
+                    risk_class=risk_assessment.risk_class,
+                    requested_by=task_id,
+                )
+                payload["hitl_request_id"] = hitl_req.request_id
+                transition(TaskState.NEEDS_APPROVAL, f"Awaiting HITL approval ({hitl_req.request_id}).")
+                return self._finalize_receipt(
+                    goal_id, task_id, trace_id, risk_assessment.risk_class, 
+                    policy_decision, ExecutionStatus.NEEDS_APPROVAL, TaskState.NEEDS_APPROVAL, 
+                    transitions, started_at, idempotency_key=effective_idem_key, payload_hash=canonical_payload_hash
+                )
 
         # 4. CAPABILITY_CHECKED
         agent_id = payload.get("target_agent", "rae-hive")
@@ -197,7 +290,7 @@ class AutonomyKernel:
             return self._finalize_receipt(
                 goal_id, task_id, trace_id, risk_assessment.risk_class, 
                 policy_decision, ExecutionStatus.REJECTED, TaskState.REJECTED, 
-                transitions, started_at
+                transitions, started_at, idempotency_key=effective_idem_key, payload_hash=canonical_payload_hash
             )
             
         transition(TaskState.CAPABILITY_CHECKED, f"Agent {agent_id} capabilities verified against {contract.id}.")
@@ -222,6 +315,16 @@ class AutonomyKernel:
             logger.info(f"mcts_plan_selected: selected_branch={cognitive_plan.selected_branch_id}, win_prob={cognitive_plan.win_probability}")
         else:
             transition(TaskState.PLANNED, "Execution plan generated.")
+
+        # Speculative Tool Execution (k <= 3 read-only commands in parallel during PLANNED/DRY_RUN)
+        spec_cmds = payload.get("speculative_commands")
+        if spec_cmds and isinstance(spec_cmds, list):
+            spec_results = await self.speculative_executor.execute_speculatively(
+                trace_id=trace_id,
+                commands=spec_cmds,
+                risk_class=RiskClass.R0,
+            )
+            payload["speculative_results"] = spec_results
 
         # 6. DRY_RUN (Mandatory for R3+)
         if risk_assessment.risk_class >= RiskClass.R3:
@@ -520,16 +623,28 @@ class AutonomyKernel:
         return self._finalize_receipt(
             goal_id, task_id, trace_id, risk_assessment.risk_class, 
             policy_decision, execution_status, TaskState.COMPLETED, 
-            transitions, started_at, evidence_hash, ledger_id
+            transitions, started_at, evidence_hash, ledger_id,
+            idempotency_key=effective_idem_key, payload_hash=canonical_payload_hash
         )
 
     def _finalize_receipt(
         self, goal_id, task_id, trace_id, risk_class, 
         policy_decision, execution_status, final_state, 
         transitions, started_at, evidence_hash="n/a", ledger_id="n/a",
-        quality_status=QualityStatus.APPROVED
+        quality_status=QualityStatus.APPROVED,
+        idempotency_key: Optional[str] = None,
+        payload_hash: Optional[str] = None,
     ) -> ExecutionReceipt:
-        
+        if transitions and transitions[-1].to_state != final_state:
+            transitions.append(
+                StateTransition(
+                    from_state=transitions[-1].to_state,
+                    to_state=final_state,
+                    timestamp=datetime.now(timezone.utc),
+                    reason=f"Terminal state reached: {final_state.value}",
+                    actor="autonomy-kernel",
+                )
+            )
         finished_at = datetime.now(timezone.utc)
         elapsed_seconds = (finished_at - started_at).total_seconds()
         if len(evidence_hash) != 64:
@@ -628,7 +743,9 @@ class AutonomyKernel:
             reasoning=f"Task {task_id} finished with status {execution_status}.",
             payload=receipt.model_dump() if hasattr(receipt, "model_dump") else receipt.dict()
         )
-        
+        if idempotency_key and payload_hash:
+            self._idempotency_cache[str(idempotency_key)] = (payload_hash, receipt)
+
         return receipt
 
     def _create_handoff_envelope(self, trace_id: str, source: str, target: str, required_caps: List[str], payload: Dict[str, Any]) -> HandoffEnvelope:

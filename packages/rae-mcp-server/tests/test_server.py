@@ -162,3 +162,41 @@ async def test_sandbox_exec_and_run_tools():
         data2 = json.loads(res2[0].text)
         assert data2["exit_code"] == 0
         assert mock_prune.call_count == 2
+
+@pytest.mark.asyncio
+async def test_quality_rpc_tool():
+    res = await call_tool("rae_quality_rpc", {"operation": "quality.report", "params": {}})
+    assert len(res) == 1
+    data = json.loads(res[0].text)
+    assert "acceptance_criteria" in data or "all_acceptance_criteria_met" in data
+
+@pytest.mark.asyncio
+async def test_kernel_execute_tool():
+    res = await call_tool(
+        "rae_kernel_execute",
+        {"goal_id": "g-mcp-1", "task_id": "t-mcp-1", "intent": "Read configuration"}
+    )
+    assert len(res) == 1
+    data = json.loads(res[0].text)
+    assert data["goal_id"] == "g-mcp-1"
+    assert data["execution_status"] == "SUCCESS"
+
+@pytest.mark.asyncio
+async def test_lab_insights_tool():
+    res = await call_tool("rae_lab_insights", {"project": "default"})
+    assert len(res) == 1
+    data = json.loads(res[0].text)
+    assert "lean_score" in data or "status" in data
+
+@pytest.mark.asyncio
+async def test_knowledge_resolve_tool():
+    res = await call_tool(
+        "rae_knowledge_resolve",
+        {"query": "HEAD", "tenant_id": "default", "request_id": "req-test-1"}
+    )
+    assert len(res) == 1
+    data = json.loads(res[0].text)
+    assert "bundle_id" in data
+    assert "content_hash" in data
+    assert "audit_hash" in data
+

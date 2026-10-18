@@ -904,3 +904,85 @@ class OutcomeRecordResponse(BaseModel):
     execution_time_seconds: float = Field(..., ge=0.0)
     token_cost: int = Field(0, ge=0)
     created_at: UtcDateTime
+
+
+# ==========================================
+# ADR-001: LIFECYCLE FSM TRANSITION CONTRACTS & ERRORS
+# ==========================================
+
+class TransitionError(RuntimeError):
+    """Base error for ADR-001 lifecycle state transition failures."""
+    pass
+
+
+class InvalidTransitionError(TransitionError):
+    """Raised when a requested state transition is not permitted by the FSM."""
+    pass
+
+
+class TransitionAuthorizationError(TransitionError):
+    """Raised when the actor is not authorized to perform the transition."""
+    pass
+
+
+class TransitionGuardError(TransitionError):
+    """Raised when a business guard or cycle limit precondition fails."""
+    pass
+
+
+class TransitionInvariantError(TransitionError):
+    """Raised when post-transition domain invariants are violated."""
+    pass
+
+
+class TransitionContract(BaseModel):
+    """ADR-001 3-step transition contract (authorize -> guard -> apply)."""
+
+    model_config = CONTRACT_CONFIG
+
+    schema_version: SchemaVersion = "1.0"
+    from_state: TaskState
+    to_state: TaskState
+    allowed_actors: List[str] = Field(
+        default_factory=lambda: ["autonomy-kernel", "operator", "rae-supervisor"]
+    )
+    cycle_limit: int = Field(5, gt=0)
+
+    def authorize(self, actor: str) -> None:
+        if self.allowed_actors and actor not in self.allowed_actors:
+            raise TransitionAuthorizationError(
+                f"Actor '{actor}' is not authorized for transition "
+                f"{self.from_state.value} -> {self.to_state.value}"
+            )
+
+    def guard(self, cycle_count: int = 0, precondition_ok: bool = True) -> None:
+        if cycle_count > self.cycle_limit:
+            raise TransitionGuardError(
+                f"Transition cycle_count ({cycle_count}) exceeds cycle_limit ({self.cycle_limit}) "
+                f"for {self.from_state.value} -> {self.to_state.value}"
+            )
+        if not precondition_ok:
+            raise TransitionGuardError(
+                f"Guard precondition failed for {self.from_state.value} -> {self.to_state.value}"
+            )
+
+    def apply(
+        self,
+        actor: str = "autonomy-kernel",
+        reason: Optional[str] = None,
+        cycle_count: int = 0,
+        precondition_ok: bool = True,
+    ) -> StateTransition:
+        self.authorize(actor)
+        self.guard(cycle_count=cycle_count, precondition_ok=precondition_ok)
+        st = StateTransition(
+            from_state=self.from_state,
+            to_state=self.to_state,
+            timestamp=utc_now(),
+            reason=reason,
+            actor=actor,
+        )
+        if st.to_state != self.to_state:
+            raise TransitionInvariantError("Post-transition state mismatch")
+        return st
+

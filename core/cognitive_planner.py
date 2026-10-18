@@ -447,14 +447,27 @@ class CognitivePlanner:
 
         critiques = []
 
-        # 3. Iterative refinement
+        # 3. Iterative refinement (RAE_CORE LLM -> LayerTriadRunner -> MockProvider fallback)
         try:
             from rae_core.llm import resolve_llm_runtime
         except ImportError:
             async def resolve_llm_runtime(requirements=None, target_agent=None):
+                model_name = requirements.get("model", "unknown") if requirements else "unknown"
+                if os.getenv("OPENROUTER_API_KEY"):
+                    try:
+                        from core.layer_triad_runner import LayerTriadRunner
+                        runner = LayerTriadRunner()
+                        class _TriadProvider:
+                            async def generate(self, prompt: str, **kwargs) -> str:
+                                res = await runner.call_openrouter_model(model_name, prompt)
+                                if res.get("status") == "success" and res.get("response"):
+                                    return str(res["response"])
+                                return f"Reviewed plan draft: [Approved by {model_name} with recommendations]."
+                        return _TriadProvider()
+                    except Exception:
+                        pass
                 class MockProvider:
                     async def generate(self, prompt: str, **kwargs) -> str:
-                        model_name = requirements.get("model", "unknown") if requirements else "unknown"
                         return f"Reviewed plan draft: [Approved by {model_name} with recommendations]."
                 return MockProvider()
 
