@@ -1,3 +1,4 @@
+from pathlib import Path
 #!/usr/bin/env python3
 """
 Consensus Planner Cycle Script for RAE-Suite
@@ -21,7 +22,7 @@ if not OPENROUTER_API_KEY:
     print("CRITICAL ERROR: OPENROUTER_API_KEY is not set in environment!")
     sys.exit(1)
 
-DOCS_DIR = "/home/grzegorz/cloud/RAE-Suite/docs"
+DOCS_DIR = str(Path(__file__).resolve().parents[1] / "docs")
 PLAN_PATH = os.path.join(DOCS_DIR, "detailed_implementation_plan.md")
 AUDIT_TRAIL_PATH = os.path.join(DOCS_DIR, "RAE_CONSENSUS_AUDIT_TRAIL.md")
 

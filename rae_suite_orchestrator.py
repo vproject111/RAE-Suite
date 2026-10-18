@@ -122,6 +122,22 @@ class RAE_CEO_Orchestrator:
                 
             await asyncio.sleep(self.orchestration_interval)
 
+    async def reconcile_once(self) -> Dict[str, Any]:
+        """Executes a single deterministic observe-plan-reconcile cycle for HTTP/MCP triggers."""
+        desired_state = self._load_desired_factory_spec()
+        actual_state = await self._observe_system_state()
+        drifts = self._detect_configuration_drifts(desired_state, actual_state)
+        for drift in drifts:
+            await self._align_drift(drift)
+        self.last_action_time = datetime.utcnow()
+        return {
+            "status": "reconciled",
+            "drifts_detected": len(drifts),
+            "drifts": drifts,
+            "active_agents": actual_state.get("active_agents", []),
+            "backlog_count": len(actual_state.get("backlog", [])),
+        }
+
     def _load_desired_factory_spec(self) -> Dict[str, Any]:
         """Loads desired factory state configuration from factory.yaml spec."""
         if not os.path.exists(self.factory_spec_path):

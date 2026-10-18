@@ -60,8 +60,58 @@ services:
     networks:
       - rae-internal
 
+  rae-am-celery-worker:
+    build:
+      context: ./packages/rae-agentic-memory
+      dockerfile: Dockerfile
+    restart: always
+    command: celery -A apps.memory_api.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - RAE_API_URL=http://rae-memory:8000
+      - POSTGRES_HOST=rae-am-postgres
+      - POSTGRES_DB=rae
+      - POSTGRES_USER=rae
+      - POSTGRES_PASSWORD=rae_password
+      - REDIS_HOST=rae-am-redis
+      - CELERY_BROKER_URL=redis://rae-am-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://rae-am-redis:6379/0
+      - QDRANT_HOST=rae-am-qdrant
+      - PYTHONPATH=/app
+      - RAE_DB_MODE=ignore
+    depends_on:
+      - rae-am-postgres
+      - rae-am-redis
+      - rae-memory
+    networks:
+      - rae-internal
+
+  rae-am-celery-beat:
+    build:
+      context: ./packages/rae-agentic-memory
+      dockerfile: Dockerfile
+    restart: always
+    command: celery -A apps.memory_api.celery_app beat --loglevel=info
+    environment:
+      - RAE_API_URL=http://rae-memory:8000
+      - POSTGRES_HOST=rae-am-postgres
+      - POSTGRES_DB=rae
+      - POSTGRES_USER=rae
+      - POSTGRES_PASSWORD=rae_password
+      - REDIS_HOST=rae-am-redis
+      - CELERY_BROKER_URL=redis://rae-am-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://rae-am-redis:6379/0
+      - QDRANT_HOST=rae-am-qdrant
+      - PYTHONPATH=/app
+      - RAE_DB_MODE=ignore
+    depends_on:
+      - rae-am-postgres
+      - rae-am-redis
+      - rae-memory
+    networks:
+      - rae-internal
+
   rae-suite:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:2.9.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:2.9.4
     build:
       context: .
       dockerfile: Dockerfile
@@ -71,6 +121,7 @@ services:
     environment:
       - RAE_API_URL=http://rae-memory:8000
       - RAE_QUALITY_URL=http://rae-quality:8000
+      - RAE_LAB_URL=http://rae-lab:8000
       - PYTHONPATH=/app/src:/app:/app/packages/rae-quality
       - RAE_PLANNING_FLOW=${RAE_PLANNING_FLOW:-tot_mcts}
       - RAE_CODING_FLOW=${RAE_CODING_FLOW:-standard}
@@ -99,7 +150,7 @@ services:
       - rae-internal
 
   rae-quality:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:2.9.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:2.9.4
     build:
       context: .
       dockerfile: ./packages/rae-quality/Dockerfile
