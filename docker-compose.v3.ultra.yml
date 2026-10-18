@@ -91,16 +91,17 @@ services:
       - rae-internal
 
   rae-quality:
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:2.9.0
     build:
-      context: ../RAE-Quality
+      context: ./packages/rae-quality
       dockerfile: Dockerfile
     container_name: rae-quality-v3
     ports:
-      - "8010:8010"
+      - "8010:8000"
     environment:
-      - PYTHONPATH=/app:/app/packages/rae-core/src
+      - PYTHONPATH=/app:/app/rae_core
     volumes:
-      - ../RAE-core:/app/packages/rae-core
+      - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
       - rae-suite
     networks:
