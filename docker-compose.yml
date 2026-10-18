@@ -61,6 +61,7 @@ services:
       - rae-internal
 
   rae-suite:
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:2.9.0
     build:
       context: .
       dockerfile: Dockerfile
@@ -69,7 +70,8 @@ services:
       - "8009:8009"
     environment:
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/src:/app
+      - RAE_QUALITY_URL=http://rae-quality:8000
+      - PYTHONPATH=/app/src:/app:/app/packages/rae-quality
       - RAE_PLANNING_FLOW=${RAE_PLANNING_FLOW:-tot_mcts}
       - RAE_CODING_FLOW=${RAE_CODING_FLOW:-standard}
     volumes:
