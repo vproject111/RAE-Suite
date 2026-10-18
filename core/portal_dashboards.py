@@ -63,14 +63,38 @@ class PortalDashboardAggregator:
     """
     Aggregates data across all RAE module dashboards for unified RAE-PORTAL Command Center.
     """
+    def __init__(self, quality_gateway: Optional[Any] = None, hitl_engine: Optional[Any] = None):
+        self.quality_gateway = quality_gateway
+        self.hitl_engine = hitl_engine
+
     def get_full_command_center_overview(self) -> Dict[str, Any]:
+        sup_data = SupervisorDashboardData()
+        qual_data = QualityTribunalDashboardData()
+
+        if self.hitl_engine is not None and hasattr(self.hitl_engine, "_requests"):
+            pending = sum(
+                1 for r in self.hitl_engine._requests.values()
+                if getattr(r, "status", "") == "PENDING"
+            )
+            sup_data.pending_approvals = pending
+
+        if self.quality_gateway is not None and hasattr(self.quality_gateway, "report"):
+            try:
+                q_rep = self.quality_gateway.report()
+                scorecards = q_rep.get("agent_scorecards", [])
+                if scorecards:
+                    qual_data.tribunal_audits_count = max(qual_data.tribunal_audits_count, len(scorecards))
+            except Exception:
+                pass
+
         return {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "supervisor": SupervisorDashboardData().model_dump(),
-            "quality": QualityTribunalDashboardData().model_dump(),
+            "supervisor": sup_data.model_dump(),
+            "quality": qual_data.model_dump(),
             "lab": LabKaizenDashboardData().model_dump(),
             "memory": MemorySubconsciousDashboardData().model_dump(),
             "phoenix_clr": PhoenixClrDashboardData().model_dump(),
             "mesh": MeshMonitorDashboardData().model_dump(),
             "status": "ALL_SYSTEMS_OPERATIONAL"
         }
+
