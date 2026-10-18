@@ -132,9 +132,10 @@ class HardFramesEngine:
         if target_path:
             abs_target = os.path.abspath(target_path)
             # Allow workspace roots and known safe project directories
+            cloud_root = os.getenv("RAE_CLOUD_ROOT", os.path.abspath(os.path.join(self.repo_root, "..")))
             allowed_prefixes = [
                 self.repo_root,
-                "/home/grzegorz/cloud",
+                cloud_root,
                 "/tmp",
                 "/var/tmp",
             ]

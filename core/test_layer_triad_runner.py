@@ -6,7 +6,7 @@ from core.layer_triad_runner import LayerTriadRunner
 
 @pytest.fixture
 def runner():
-    return LayerTriadRunner(config_path="/home/grzegorz/cloud/RAE-Suite/config/layer_triads_registry.yaml")
+    return LayerTriadRunner()
 
 
 def test_get_available_layers(runner):

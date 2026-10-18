@@ -32,7 +32,7 @@ class LayerTriadRunner:
         else:
             # Dynamically resolve relative to this file
             default_path = Path(__file__).resolve().parent.parent / "config" / "layer_triads_registry.yaml"
-            self.config_path = default_path if default_path.exists() else Path("/home/grzegorz/cloud/RAE-Suite/config/layer_triads_registry.yaml")
+            self.config_path = default_path if default_path.exists() else Path.cwd() / "config" / "layer_triads_registry.yaml"
 
         self.api_key = os.getenv("OPENROUTER_API_KEY", "")
         self.openrouter_base_url = "https://openrouter.ai/api/v1"
