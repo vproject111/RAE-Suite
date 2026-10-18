@@ -9,6 +9,8 @@ class TestIntegrityGuard:
     AST-based guard that prevents agents from weakening tests.
     Detects deletion of assertions, addition of 'pass', or skipping critical tests.
     """
+    __test__ = False
+
     def __init__(self):
         self.suspicious_patterns = [
             "pass",

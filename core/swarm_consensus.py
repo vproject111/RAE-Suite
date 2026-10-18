@@ -94,7 +94,7 @@ class SwarmConsensusEngine:
                 logger.info(f"Swarm consensus APPROVED (Approve: {approve_weight}, Reject: {reject_weight})")
 
         proposal = ConsensusProposal(
-            proposal_id=proposal_id,
+            id=proposal_id,
             task_id=task_id,
             risk_class=risk_class,
             votes=votes,

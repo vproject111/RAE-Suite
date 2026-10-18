@@ -156,15 +156,21 @@ class LayerTriadRunner:
                 }
         except Exception as e:
             duration_ms = (time.time() - t0) * 1000
+            err_msg = str(e)
+            status_code = "EXCEPTION"
+            if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+                if provider in ("node1_lumina", "node1", "local_gpu", "local", "ollama"):
+                    status_code = "NODE_OFFLINE"
+                    err_msg = f"Local compute node '{provider}' ({endpoint_url}) is offline or unreachable. Recommended fallback: OpenRouter tier1_generate ($0.05/1M). Network error: {e}"
             return {
                 "model": model_name,
                 "role": role,
-                "content": f"Exception: {str(e)}",
+                "content": err_msg,
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "cost_usd": 0.0,
                 "latency_ms": round(duration_ms, 2),
-                "status": "EXCEPTION"
+                "status": status_code
             }
 
     async def execute_layer_triad(

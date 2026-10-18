@@ -51,6 +51,7 @@ from rae_contracts.autonomy import (
     ConsensusProposal,
     InformationClass,
     RestrictedContextEntry,
+    MemoryLayer,
 )
 from rae_contracts.execution_receipt import (
     ExecutionReceipt,

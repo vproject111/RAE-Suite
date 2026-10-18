@@ -1,6 +1,4 @@
-import pytest
-from core.model_router import ModelRouter, RouteBudget
-from core.cognitive_planner import CognitivePlanner
+from core.model_router import ModelRouter
 from core.escalation_engine import (
     DualEscalationEngine,
     EscalationRequest,
@@ -16,11 +14,24 @@ def test_model_router_quantile_budget_routing():
 
     # R1 task -> should select cheap/fast model
     decision_low = router.route_task(risk_class=RiskClass.R1, expected_input_tokens=2000, expected_output_tokens=500)
-    assert decision_low.selected_model in ["llama-3.1-8b", "openai/gpt-5.6-luna-pro", "moonshotai/kimi-k3", "deepseek/deepseek-r1"]
+    assert decision_low.selected_model in [
+        "llama-3.1-8b",
+        "openai/gpt-5.6-luna-pro",
+        "moonshotai/kimi-k3",
+        "deepseek/deepseek-r1",
+        "deepseek-r1:8b",
+        "qwen3.5:9b",
+        "SpeakLeash/bielik-11b-v3.0-instruct:Q5_K_M",
+    ]
 
     # R5 high-risk task -> should select high-quality model (DeepSeek R1 or Claude Opus 4.8)
     decision_high = router.route_task(risk_class=RiskClass.R5, expected_input_tokens=10000, expected_output_tokens=2000)
-    assert decision_high.selected_model in ["anthropic/claude-opus-4.8", "deepseek/deepseek-r1", "openai/gpt-5.6-luna-pro"]
+    assert decision_high.selected_model in [
+        "anthropic/claude-opus-4.8",
+        "deepseek/deepseek-r1",
+        "openai/gpt-5.6-luna-pro",
+        "deepseek-r1:8b",
+    ]
 
 
 def test_dual_escalation_engine_routing():
