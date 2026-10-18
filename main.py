@@ -45,12 +45,13 @@ autonomy_kernel = AutonomyKernel(repo_root=str(BASE_DIR))
 triad_runner = LayerTriadRunner()
 portal_dashboard = PortalDashboardAggregator()
 portal_hitl = PortalHITLApprovalEngine()
+autonomy_kernel.hitl_engine = portal_hitl
 
 @app.get("/health")
 async def health():
     return {
         "status": "operational",
-        "version": "3.9.0",
+        "version": "3.9.1",
         "api": "v2",
         "quality_v2": "integrated",
     }
@@ -58,6 +59,12 @@ async def health():
 @app.get("/v2/factory/reconcile")
 async def factory_reconcile():
     return await reconciler.reconcile_all()
+
+@app.post("/v2/orchestrator/reconcile")
+async def orchestrator_reconcile():
+    from rae_suite_orchestrator import RAE_CEO_Orchestrator
+    ceo = RAE_CEO_Orchestrator()
+    return await ceo.reconcile_once()
 
 @app.post("/v2/departments/register")
 async def register_department(reg: AgentRegistration):
@@ -67,7 +74,17 @@ async def register_department(reg: AgentRegistration):
 @app.get("/v2/fabric/route")
 async def route_task(capability_id: str, max_risk: str = "high"):
     agents = [vars(a) for a in cap_registry._agents.values()]
-    decision = router.route(capability_id, agents, max_risk)
+    mab_weights = None
+    try:
+        import httpx
+        lab_url = os.getenv("RAE_LAB_URL", "http://localhost:8011")
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            resp = await client.get(f"{lab_url}/api/mab/weights")
+            if resp.status_code == 200:
+                mab_weights = resp.json()
+    except Exception:
+        pass
+    decision = router.route(capability_id, agents, max_risk, weights=mab_weights)
     if not decision:
         raise HTTPException(status_code=404, detail=f"No agent for {capability_id}")
     return decision
@@ -155,6 +172,10 @@ async def suite_triad_run(payload: Dict[str, Any]):
 @app.get("/v2/portal/overview")
 async def suite_portal_overview():
     return portal_dashboard.get_full_command_center_overview()
+
+@app.get("/v2/portal/hitl/requests")
+async def suite_portal_hitl_requests(status: Optional[str] = None):
+    return [r.model_dump() for r in portal_hitl.list_requests(status=status)]
 
 @app.post("/v2/portal/hitl/request")
 async def suite_portal_hitl_request(payload: Dict[str, Any]):

@@ -1,3 +1,4 @@
+from pathlib import Path
 #!/usr/bin/env python3
 """
 RAE-Suite Cloud Deployment & Keycloak Multi-Agent Consensus Planner.
@@ -120,7 +121,7 @@ Podaj konkretne, rygorystyczne wytyczne techniczne:
         reviews.append((name, focus, response))
         logger.info(f"Received response from {name}.")
 
-    output_path = "/home/grzegorz/cloud/RAE-Suite/docs/RAE_SUITE_CLOUD_DEPLOYMENT_PLAN.md"
+    output_path = str(Path(__file__).resolve().parents[1] / "docs" / "RAE_SUITE_CLOUD_DEPLOYMENT_PLAN.md")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     with open(output_path, "w", encoding="utf-8") as f:

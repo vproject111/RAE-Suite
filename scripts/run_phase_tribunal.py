@@ -1,3 +1,4 @@
+from pathlib import Path
 #!/usr/bin/env python3
 """
 RAE-Suite Phase Tribunal Engine
@@ -17,7 +18,7 @@ if not OPENROUTER_API_KEY:
     print("CRITICAL ERROR: OPENROUTER_API_KEY is not set!")
     sys.exit(1)
 
-DOCS_DIR = "/home/grzegorz/cloud/RAE-Suite/docs"
+DOCS_DIR = str(Path(__file__).resolve().parents[1] / "docs")
 LEDGER_PATH = os.path.join(DOCS_DIR, "RAE_EXECUTION_LEDGER.jsonl")
 
 

@@ -97,7 +97,7 @@ def test_control_plane_new_v2_endpoints():
     # 1. /health
     r_health = client.get("/health")
     assert r_health.status_code == 200
-    assert r_health.json()["version"] == "3.9.0"
+    assert r_health.json()["version"] == "3.9.1"
 
     # 2. /v2/kernel/execute
     r_exec = client.post(
@@ -112,7 +112,7 @@ def test_control_plane_new_v2_endpoints():
     assert r_ov.status_code == 200
     assert r_ov.json()["status"] == "ALL_SYSTEMS_OPERATIONAL"
 
-    # 4. /v2/portal/hitl/request & approve & iso-report
+    # 4. /v2/portal/hitl/request & approve & requests & iso-report
     r_req = client.post(
         "/v2/portal/hitl/request",
         json={
@@ -130,7 +130,13 @@ def test_control_plane_new_v2_endpoints():
         json={"request_id": req_id, "approved": True, "approver": "grzegorz"},
     )
     assert r_app.status_code == 200
-    assert r_app.json()["status"] == "APPROVED"
+    app_data = r_app.json()
+    assert app_data["status"] == "APPROVED"
+    assert app_data.get("approval_token") is not None
+
+    r_list = client.get("/v2/portal/hitl/requests?status=APPROVED")
+    assert r_list.status_code == 200
+    assert any(item["request_id"] == req_id for item in r_list.json())
 
     r_iso = client.get("/v2/portal/hitl/iso-report")
     assert r_iso.status_code == 200
@@ -144,3 +150,49 @@ def test_control_plane_new_v2_endpoints():
     assert r_know.status_code == 200
     assert "content_hash" in r_know.json()
     assert "audit_hash" in r_know.json()
+
+    # 6. /v2/orchestrator/reconcile
+    r_rec = client.post("/v2/orchestrator/reconcile")
+    assert r_rec.status_code == 200
+    assert r_rec.json()["status"] == "reconciled"
+
+
+@pytest.mark.asyncio
+async def test_hitl_signed_token_resumes_r3_task():
+    kernel = AutonomyKernel(repo_root=".")
+    payload = {"target_agent": "rae-hive", "require_hitl": True}
+    # Task with require_hitl without human approval first transitions to NEEDS_APPROVAL
+    r_pending = await kernel.execute_task(
+        goal_id="g-r3",
+        task_id="t-r3",
+        intent="Read status with HITL gate",
+        payload=payload,
+    )
+    assert r_pending.final_state == TaskState.NEEDS_APPROVAL
+    req_id = payload["hitl_request_id"]
+
+    # Operator approves via HITL engine and receives HMAC-SHA256 token
+    approved_req = kernel.hitl_engine.process_approval(
+        request_id=req_id, approved=True, approver="grzegorz", reason="Approved HITL gate"
+    )
+    assert approved_req.approval_token is not None
+    assert kernel.hitl_engine.verify_approval_token(req_id, approved_req.approval_token)
+
+    # Re-executing with hitl_request_id and signed approval_token transitions NEEDS_APPROVAL -> APPROVED
+    payload["approval_token"] = approved_req.approval_token
+    r_approved = await kernel.execute_task(
+        goal_id="g-r3",
+        task_id="t-r3",
+        intent="Read status with HITL gate",
+        payload=payload,
+    )
+    assert any(t.to_state == TaskState.APPROVED for t in r_approved.state_transitions)
+
+
+def test_supervisor_mcp_refactored_syntax():
+    import supervisor_mcp
+    tsx, graph, mem = supervisor_mcp.get_stats()
+    assert isinstance(tsx, int)
+    assert isinstance(graph, int)
+    assert isinstance(mem, int)
+

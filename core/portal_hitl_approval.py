@@ -4,6 +4,9 @@ Provides authorization interfaces for high-risk operations (R4-R6),
 approval request tracking, and ISO 27001 / ISO 42001 compliance audit trails.
 """
 
+import os
+import hmac
+import hashlib
 import time
 import uuid
 import logging
@@ -24,6 +27,7 @@ class ApprovalRequest(BaseModel):
     status: str = "PENDING"  # PENDING, APPROVED, REJECTED
     approved_by: Optional[str] = None
     reason: Optional[str] = None
+    approval_token: Optional[str] = None
 
 
 class ISOComplianceReport(BaseModel):
@@ -36,10 +40,26 @@ class ISOComplianceReport(BaseModel):
 
 class PortalHITLApprovalEngine:
     """
-    Manages Human-In-The-Loop authorization workflows and ISO compliance reporting.
+    Manages Human-In-The-Loop authorization workflows and ISO compliance reporting
+    with HMAC-SHA256 cryptographic approval tokens.
     """
-    def __init__(self):
+    def __init__(self, signing_secret: Optional[str] = None):
         self._requests: Dict[str, ApprovalRequest] = {}
+        self._signing_secret = (
+            signing_secret
+            or os.getenv("RAE_HITL_SIGNING_SECRET", "rae-hitl-default-hmac-secret-2026")
+        )
+
+    def _compute_token(self, req: ApprovalRequest) -> str:
+        canonical = (
+            f"{req.request_id}:{req.target_module}:{req.action_name}:"
+            f"{req.risk_class.value}:{req.approved_by or ''}:{req.status}"
+        )
+        return hmac.new(
+            self._signing_secret.encode("utf-8"),
+            canonical.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
 
     def create_approval_request(self, target_module: str, action_name: str, risk_class: RiskClass, requested_by: str) -> ApprovalRequest:
         req_id = f"req_{uuid.uuid4().hex[:8]}"
@@ -64,8 +84,30 @@ class PortalHITLApprovalEngine:
         req.status = "APPROVED" if approved else "REJECTED"
         req.approved_by = approver
         req.reason = reason
+        req.approval_token = self._compute_token(req) if approved else None
         logger.info(f"HITL Approval Processed: {request_id} -> {req.status} by {approver}")
         return req
+
+    def verify_approval_token(self, request_id: str, approval_token: str) -> bool:
+        req = self._requests.get(request_id)
+        if not req or req.status != "APPROVED" or not req.approval_token:
+            return False
+        expected = self._compute_token(req)
+        return hmac.compare_digest(expected, approval_token)
+
+    def is_request_approved(self, request_id: str, approval_token: Optional[str] = None) -> bool:
+        req = self._requests.get(request_id)
+        if not req or req.status != "APPROVED":
+            return False
+        if approval_token is not None:
+            return self.verify_approval_token(request_id, approval_token)
+        return True
+
+    def list_requests(self, status: Optional[str] = None) -> List[ApprovalRequest]:
+        reqs = list(self._requests.values())
+        if status:
+            reqs = [r for r in reqs if r.status.upper() == status.upper()]
+        return reqs
 
     def get_iso_compliance_report(self) -> ISOComplianceReport:
         return ISOComplianceReport(
@@ -75,3 +117,4 @@ class PortalHITLApprovalEngine:
             audit_chain_integrity="VERIFIED_SHA256",
             active_hitl_policies_count=len(self._requests) + 4
         )
+
