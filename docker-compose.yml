@@ -34,50 +34,46 @@ services:
       - rae-internal
 
   rae-memory:
-    build:
-      context: ./packages/rae-agentic-memory
-      dockerfile: Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.2
     restart: always
-    command: >
-      bash -c "alembic upgrade head && uvicorn apps.memory_api.main:app --host 0.0.0.0 --port 8000"
+    command: ["/usr/local/bin/rae-memory"]
     ports:
       - "8000:8000"
     environment:
+      - PORT=8000
+      - RAE_PORT=8000
+      - RAE_LIVE_DB=1
       - RAE_API_URL=http://localhost:8000
       - POSTGRES_HOST=rae-am-postgres
+      - POSTGRES_PORT=5432
       - POSTGRES_DB=rae
       - POSTGRES_USER=rae
       - POSTGRES_PASSWORD=rae_password
       - REDIS_HOST=rae-am-redis
       - QDRANT_HOST=rae-am-qdrant
-      - PYTHONPATH=/app
-      - ML_SERVICE_URL=
+      - QDRANT_PORT=6333
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     depends_on:
       - rae-am-postgres
       - rae-am-redis
+      - rae-am-qdrant
     networks:
       - rae-internal
 
   rae-am-celery-worker:
-    build:
-      context: ./packages/rae-agentic-memory
-      dockerfile: Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.2
     restart: always
-    command: celery -A apps.memory_api.celery_app worker --loglevel=info --concurrency=2
+    command: ["/usr/local/bin/rae-crl"]
     environment:
+      - PORT=8503
       - RAE_API_URL=http://rae-memory:8000
       - POSTGRES_HOST=rae-am-postgres
       - POSTGRES_DB=rae
       - POSTGRES_USER=rae
       - POSTGRES_PASSWORD=rae_password
       - REDIS_HOST=rae-am-redis
-      - CELERY_BROKER_URL=redis://rae-am-redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://rae-am-redis:6379/0
       - QDRANT_HOST=rae-am-qdrant
-      - PYTHONPATH=/app
-      - RAE_DB_MODE=ignore
     depends_on:
       - rae-am-postgres
       - rae-am-redis
@@ -86,23 +82,16 @@ services:
       - rae-internal
 
   rae-am-celery-beat:
-    build:
-      context: ./packages/rae-agentic-memory
-      dockerfile: Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.2
     restart: always
-    command: celery -A apps.memory_api.celery_app beat --loglevel=info
+    command: ["/usr/local/bin/rae-crl"]
     environment:
+      - PORT=8504
       - RAE_API_URL=http://rae-memory:8000
       - POSTGRES_HOST=rae-am-postgres
       - POSTGRES_DB=rae
       - POSTGRES_USER=rae
       - POSTGRES_PASSWORD=rae_password
-      - REDIS_HOST=rae-am-redis
-      - CELERY_BROKER_URL=redis://rae-am-redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://rae-am-redis:6379/0
-      - QDRANT_HOST=rae-am-qdrant
-      - PYTHONPATH=/app
-      - RAE_DB_MODE=ignore
     depends_on:
       - rae-am-postgres
       - rae-am-redis
@@ -111,58 +100,48 @@ services:
       - rae-internal
 
   rae-suite:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:2.9.4
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:5.3.2
     restart: always
+    command: ["/usr/local/bin/rae-suite"]
     ports:
       - "8009:8009"
     environment:
+      - PORT=8009
       - RAE_API_URL=http://rae-memory:8000
       - RAE_QUALITY_URL=http://rae-quality:8000
-      - RAE_LAB_URL=http://rae-lab:8000
-      - PYTHONPATH=/app/src:/app:/app/packages/rae-quality
+      - RAE_LAB_URL=http://rae-lab:8011
       - RAE_PLANNING_FLOW=${RAE_PLANNING_FLOW:-tot_mcts}
       - RAE_CODING_FLOW=${RAE_CODING_FLOW:-standard}
-    volumes:
-      - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
       - rae-memory
     networks:
       - rae-internal
 
   rae-lab:
-    build:
-      context: .
-      dockerfile: ./packages/rae-lab/Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-lab:5.3.2
     restart: always
+    command: ["/usr/local/bin/rae-lab"]
     ports:
       - "8011:8011"
     environment:
+      - PORT=8011
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app/src/rae_lab:/app/src:/app
-    volumes:
-      - ./packages/rae-core/rae_core:/app/rae_core
     depends_on:
       - rae-suite
     networks:
       - rae-internal
 
   rae-quality:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:2.9.4
-    build:
-      context: .
-      dockerfile: ./packages/rae-quality/Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:5.3.2
     restart: always
+    command: ["/usr/local/bin/rae-quality"]
     ports:
       - "8010:8000"
     environment:
+      - PORT=8000
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
       - RAE_CLOUD_ROOT=/cloud
     volumes:
-      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects:ro
       - ..:/cloud:ro
     depends_on:
@@ -171,18 +150,16 @@ services:
       - rae-internal
 
   rae-phoenix:
-    build:
-      context: .
-      dockerfile: ./packages/rae-phoenix/Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-phoenix:5.3.2
     restart: always
+    command: ["/usr/local/bin/rae-phoenix"]
     ports:
       - "8012:8000"
     environment:
+      - PORT=8000
       - RAE_API_URL=http://rae-memory:8000
       - QUALITY_API_URL=http://rae-quality:8000
-      - PYTHONPATH=/app
     volumes:
-      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
@@ -190,87 +167,47 @@ services:
       - rae-internal
 
   rae-hive:
-    build:
-      context: .
-      dockerfile: ./packages/rae-hive/Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-hive:5.3.2
     restart: always
+    command: ["/usr/local/bin/rae-hive"]
     ports:
       - "8013:8000"
     environment:
+      - PORT=8000
       - RAE_API_URL=http://rae-memory:8000
-      - PYTHONPATH=/app
     volumes:
-      - ./packages/rae-core/rae_core:/app/rae_core
       - /mnt/extra_storage/dreamsoft_factory:/projects
     depends_on:
       - rae-suite
     networks:
       - rae-internal
 
-  rae-openclaw:
-    build:
-      context: ./packages/rae-open-claw
-      dockerfile: ../../infra/openclaw/Dockerfile.rae
-    restart: always
-    user: "node"
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    ports:
-      - "18789:18789"
-    command: ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
-    environment:
-      - RAE_API_URL=http://rae-memory:8000
-      - RAE_TENANT_ID=53717286-fe94-4c8f-baf9-c4d2758eb672
-      - RAE_PROJECT_NAME=dreamsoft_factory
-      - NODE_ENV=production
-      - HOME=/home/node
-      - OPENCLAW_GATEWAY_TOKEN=secure_gateway_token_123
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
-    volumes:
-      # Hard Frames: Code remains internal to the image
-      - ./.openclaw_config:/home/node/.openclaw:rw
-      - /tmp:/tmp:rw
-      - /mnt/extra_storage/dreamsoft_factory:/projects:ro
-    networks:
-      - rae-internal
-
   rae-supervisor:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-supervisor:5.3.2
     restart: always
     ports:
       - "8005:8005"
-    command: python rae_mcp_server.py
+    command: ["/usr/local/bin/rae-mcp"]
     environment:
+      - PORT=8005
       - RAE_API_URL=http://rae-memory:8000
       - RAE_MCP_SSE=1
       - RAE_MCP_PORT=8005
-      - PYTHONPATH=/app
-    volumes:
-      - ./packages/rae-core/rae_core:/app/rae_core
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - rae-memory
     networks:
       - rae-internal
 
   rae-portal:
-    build:
-      context: ./packages/rae-agentic-memory/rae-portal
-      dockerfile: Dockerfile
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-portal:5.3.2
     container_name: rae-portal
     restart: unless-stopped
+    command: ["/usr/local/bin/rae-portal"]
     ports:
       - "8082:8080"
     environment:
+      - PORT=8080
       - RAE_API_URL=http://rae-memory:8000
-    volumes:
-      - ./packages/rae-agentic-memory/rae-portal:/app
     depends_on:
       - rae-memory
     networks:
@@ -293,8 +230,6 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-
-# Local folder bindings used, named volumes block removed
 
 networks:
   rae-internal:
