@@ -34,7 +34,7 @@ services:
       - rae-internal
 
   rae-memory:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-memory"]
     ports:
@@ -62,7 +62,7 @@ services:
       - rae-internal
 
   rae-am-celery-worker:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-crl"]
     environment:
@@ -82,7 +82,7 @@ services:
       - rae-internal
 
   rae-am-celery-beat:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-memory:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-crl"]
     environment:
@@ -100,7 +100,7 @@ services:
       - rae-internal
 
   rae-suite:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-suite:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-suite"]
     ports:
@@ -118,7 +118,7 @@ services:
       - rae-internal
 
   rae-lab:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-lab:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-lab:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-lab"]
     ports:
@@ -132,7 +132,7 @@ services:
       - rae-internal
 
   rae-quality:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-quality:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-quality"]
     ports:
@@ -150,7 +150,7 @@ services:
       - rae-internal
 
   rae-phoenix:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-phoenix:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-phoenix:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-phoenix"]
     ports:
@@ -167,7 +167,7 @@ services:
       - rae-internal
 
   rae-hive:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-hive:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-hive:5.3.4
     restart: always
     command: ["/usr/local/bin/rae-hive"]
     ports:
@@ -183,7 +183,7 @@ services:
       - rae-internal
 
   rae-supervisor:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-supervisor:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-supervisor:5.3.4
     restart: always
     ports:
       - "8005:8005"
@@ -199,7 +199,7 @@ services:
       - rae-internal
 
   rae-portal:
-    image: harbor.cloud.printworks.pl/dreamsoft/rae-portal:5.3.3
+    image: harbor.cloud.printworks.pl/dreamsoft/rae-portal:5.3.4
     container_name: rae-portal
     restart: unless-stopped
     command: ["/usr/local/bin/rae-portal"]
